@@ -1,24 +1,47 @@
 use std::collections::HashMap;
 use serde_json::Value;
 use derive_new::new;
+use getset::Getters;
+use serde::Deserialize;
 
 type Attributes = Value;
 
 type ForcedVariationsMap = HashMap<String, i32>;
 
-pub struct BucketRange(pub(crate) f32, pub(crate) f32);
+#[derive(Getters, Debug, Deserialize)]
+pub struct BucketRange {
+    #[getset(get = "pub")]
+    pub(crate) range_start: f32,
+    #[getset(get = "pub")]
+    pub(crate) range_end: f32,
+}
+
+impl PartialEq for BucketRange {
+    fn eq(&self, other: &Self) -> bool {
+        (self.range_start - other.range_start).abs() < f32::EPSILON && (self.range_end - other.range_end).abs() < f32::EPSILON
+    }
+}
 
 type Condition = Value;
 
+#[derive(Getters)]
 struct VariationMeta {
     key: Option<String>,
     name: Option<String>,
     pass_through: Option<bool>,
 }
 
-pub struct Namespace(pub(crate) String, pub(crate) f32, pub(crate) f32);
+#[derive(Getters)]
+pub struct Namespace {
+    #[getset(get = "pub")]
+    pub(crate) id: String,
+    #[getset(get = "pub")]
+    pub(crate) range_start: f32,
+    #[getset(get = "pub")]
+    pub(crate) range_end: f32,
+}
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct Filter {
     seed: String,
     ranges: Vec<BucketRange>,
@@ -28,7 +51,7 @@ struct Filter {
     attribute: String,
 }
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct Experiment {
     key: String,
     variations: Vec<Value>,
@@ -52,7 +75,7 @@ struct Experiment {
     phase: String,
 }
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct ExperimentResult {
     in_experiment: bool,
     variation_id: i32,
@@ -69,6 +92,7 @@ struct ExperimentResult {
     pass_through: bool,
 }
 
+#[derive(Getters)]
 struct TrackData {
     experiment: Experiment,
     result: ExperimentResult,
@@ -76,7 +100,7 @@ struct TrackData {
 
 type TrackingCallback = fn(Experiment, ExperimentResult);
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct FeatureRule {
     #[new(value = "None")]
     condition: Option<Condition>,
@@ -108,7 +132,7 @@ enum Source {
     Experiment,
 }
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct FeatureResult {
     value: Value,
     on: bool,
@@ -120,7 +144,7 @@ struct FeatureResult {
     experiment_result: Option<ExperimentResult>,
 }
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct Feature {
     #[new(value = "None")]
     default_value: Option<Value>,
@@ -129,7 +153,7 @@ struct Feature {
 
 type FeatureMap = HashMap<String, Feature>;
 
-#[derive(new)]
+#[derive(new, Getters)]
 struct Context {
     #[new(value = "true")]
     enabled: bool,
