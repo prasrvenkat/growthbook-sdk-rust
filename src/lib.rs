@@ -1,3 +1,4 @@
+mod condition;
 mod model;
 mod util;
 
@@ -13,7 +14,7 @@ mod json_tests {
     use serde_json::{from_str, Value};
 
     use crate::model::{BucketRange, Namespace};
-    use crate::util;
+    use crate::{condition, util};
 
     fn get_test_case_blob(key: &str) -> Option<Value> {
         let mut content = String::new();
@@ -194,6 +195,28 @@ mod json_tests {
             assert_eq!(
                 actual, expected,
                 "in_namespace test case {} failed",
+                case_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_eval_condition() {
+        let eval_condition = get_test_case_blob("evalCondition").unwrap();
+        assert!(eval_condition.is_array());
+
+        let eval_condition: &Vec<Value> = eval_condition.as_array().unwrap();
+        for tc in eval_condition.iter() {
+            let tc = tc.as_array().unwrap();
+            let case_name: &str = tc[0].as_str().unwrap();
+            println!("testing eval_condition - case {}", case_name);
+            let condition: &Value = &tc[1];
+            let attributes: &Value = &tc[2];
+            let expected: bool = tc[3].as_bool().unwrap();
+            let actual = condition::eval_condition(attributes, condition);
+            assert_eq!(
+                actual, expected,
+                "eval_condition test case {} failed",
                 case_name
             );
         }
