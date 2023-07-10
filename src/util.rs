@@ -5,7 +5,7 @@ use data_encoding::BASE64;
 use openssl::symm::{decrypt, Cipher};
 use url::Url;
 
-use crate::model::{BucketRange, Namespace};
+use crate::model::{BucketRange, BucketRangeBuilder, Namespace};
 
 const INIT32: u32 = 0x811c9dc5;
 const PRIME32: u32 = 0x01000193;
@@ -31,12 +31,12 @@ pub fn hash(seed: &str, value: &str, version: i32) -> Option<f32> {
 }
 
 pub fn in_range(n: f32, range: &BucketRange) -> bool {
-    (n >= *range.range_start()) && (n < *range.range_end())
+    (n >= range.range_start) && (n < range.range_end)
 }
 
 pub fn in_namespace(user_id: &str, namespace: &Namespace) -> bool {
-    let hash = hash(&format!("__{}", namespace.id()), user_id, 1).expect("unable to hash");
-    (hash >= *namespace.range_start()) && (hash < *namespace.range_end())
+    let hash = hash(&format!("__{}", namespace.id), user_id, 1).expect("unable to hash");
+    (hash >= namespace.range_start) && (hash < namespace.range_end)
 }
 
 pub fn get_equal_weights(num_variations: i32) -> Vec<f32> {
@@ -65,7 +65,12 @@ pub fn get_bucket_ranges(
         .map(|w| {
             let start = cumulative;
             cumulative += w;
-            BucketRange::new(start, start + cov * w)
+            let br = BucketRangeBuilder::default()
+                .range_start(start)
+                .range_end(start + cov * w)
+                .build()
+                .unwrap();
+            br
         })
         .collect()
 }

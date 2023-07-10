@@ -11,9 +11,9 @@ mod json_tests {
     use std::fs::File;
     use std::io::Read;
 
-    use serde_json::{from_str, Value};
+    use serde_json::{from_str, Map, Value};
 
-    use crate::model::{BucketRange, Namespace};
+    use crate::model::{BucketRange, Namespace, NamespaceBuilder};
     use crate::{condition, util};
 
     fn get_test_case_blob(key: &str) -> Option<Value> {
@@ -185,11 +185,12 @@ mod json_tests {
             println!("testing in_namespace - case {}", case_name);
             let user_id: &str = tc[1].as_str().unwrap();
             let namespace_arr = tc[2].as_array().unwrap();
-            let namespace: Namespace = Namespace::new(
-                namespace_arr[0].as_str().unwrap().to_string(),
-                namespace_arr[1].as_f64().unwrap() as f32,
-                namespace_arr[2].as_f64().unwrap() as f32,
-            );
+            let namespace: Namespace = NamespaceBuilder::default()
+                .id(namespace_arr[0].as_str().unwrap().to_string())
+                .range_start(namespace_arr[1].as_f64().unwrap() as f32)
+                .range_end(namespace_arr[2].as_f64().unwrap() as f32)
+                .build()
+                .unwrap();
             let expected: bool = tc[3].as_bool().unwrap();
             let actual = util::in_namespace(user_id, &namespace);
             assert_eq!(
@@ -219,6 +220,41 @@ mod json_tests {
                 "eval_condition test case {} failed",
                 case_name
             );
+        }
+    }
+
+    #[test]
+    fn test_version_compare() {
+        let version_compare = get_test_case_blob("versionCompare").unwrap();
+        assert!(version_compare.is_object());
+
+        let version_compare: &Map<String, Value> = version_compare.as_object().unwrap();
+        for (k, v) in version_compare.iter() {
+            let op = match k.as_str() {
+                "lt" => "$vlt",
+                "gt" => "$vgt",
+                "eq" => "$veq",
+                &_ => "",
+            };
+            let cases: &Vec<Value> = v.as_array().unwrap();
+            println!("testing version_compare - case {}", op);
+            for (i, tc) in cases.iter().enumerate() {
+                let tc = tc.as_array().unwrap();
+                println!("testing index {}", i);
+                let attribute: &str = tc[0].as_str().unwrap();
+                let condition: &str = tc[1].as_str().unwrap();
+                let expected: bool = tc[2].as_bool().unwrap();
+                let actual = condition::eval_operator_condition(
+                    op,
+                    Some(&Value::from(attribute)),
+                    &Value::from(condition),
+                );
+                assert_eq!(
+                    actual, expected,
+                    "version_compare test case {}, index {} failed",
+                    op, i
+                );
+            }
         }
     }
 }

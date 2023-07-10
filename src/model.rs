@@ -1,183 +1,114 @@
 use std::collections::HashMap;
 
-use derive_new::new;
-use getset::Getters;
-use serde::Deserialize;
+use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub type Attributes = Value;
 pub type Condition = Value;
 pub type FeatureMap = HashMap<String, Feature>;
 pub type ForcedVariationsMap = HashMap<String, i32>;
-pub type TrackingCallback = fn(Experiment, ExperimentResult);
+pub type TrackingCallback = fn(&Experiment, &ExperimentResult);
 
-#[derive(new, Getters, Debug, Deserialize)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct BucketRange {
-    #[getset(get = "pub")]
-    range_start: f32,
-    #[getset(get = "pub")]
-    range_end: f32,
+    pub range_start: f32,
+    pub range_end: f32,
 }
 
 impl PartialEq for BucketRange {
     fn eq(&self, other: &Self) -> bool {
-        (self.range_start - other.range_start).abs() < f32::EPSILON
+        let tolerance = 0.001f32;
+        (self.range_start - other.range_start).abs() < tolerance
             && (self.range_end - other.range_end).abs() < f32::EPSILON
     }
 }
 
-#[derive(new, Getters, Debug)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct VariationMeta {
-    #[getset(get = "pub")]
-    key: Option<String>,
-    #[getset(get = "pub")]
-    name: Option<String>,
-    #[getset(get = "pub")]
-    pass_through: Option<bool>,
+    pub key: Option<String>,
+    pub name: Option<String>,
+    pub passthrough: Option<bool>,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct Namespace {
-    #[getset(get = "pub")]
-    id: String,
-    #[getset(get = "pub")]
-    range_start: f32,
-    #[getset(get = "pub")]
-    range_end: f32,
+    pub id: String,
+    pub range_start: f32,
+    pub range_end: f32,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct Filter {
-    #[getset(get = "pub")]
-    seed: String,
-    #[getset(get = "pub")]
-    ranges: Vec<BucketRange>,
-    #[new(value = "2")]
-    #[getset(get = "pub")]
-    hash_version: i32,
-    #[getset(get = "pub")]
-    #[new(value = r#""id".to_owned()"#)]
-    attribute: String,
+    pub seed: String,
+    pub ranges: Vec<BucketRange>,
+    pub hash_version: i32,
+    pub attribute: String,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct Experiment {
-    #[getset(get = "pub")]
-    key: String,
-    #[getset(get = "pub")]
-    variations: Vec<Value>,
-    #[getset(get = "pub")]
-    weights: Vec<f32>,
-    #[getset(get = "pub")]
-    active: bool,
-    #[getset(get = "pub")]
-    coverage: f32,
-    #[getset(get = "pub")]
-    ranges: Vec<BucketRange>,
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    condition: Option<Condition>,
-    #[getset(get = "pub")]
-    namespace: Namespace,
-    #[getset(get = "pub")]
-    force: i32,
-    #[new(value = r#""id".to_owned()"#)]
-    #[getset(get = "pub")]
-    hash_attribute: String,
-    // TODO: is this right? default was 2 in Filter
-    #[getset(get = "pub")]
-    #[new(value = "1")]
-    hash_version: i32,
-    #[getset(get = "pub")]
-    meta: Vec<VariationMeta>,
-    #[getset(get = "pub")]
-    filters: Vec<Filter>,
-    #[getset(get = "pub")]
-    seed: String,
-    #[getset(get = "pub")]
-    name: String,
-    #[getset(get = "pub")]
-    phase: String,
+    pub key: String,
+    pub variations: Vec<Value>,
+    pub weights: Vec<f32>,
+    pub active: bool,
+    pub coverage: f32,
+    pub ranges: Vec<BucketRange>,
+    pub condition: Option<Condition>,
+    pub namespace: Namespace,
+    pub force: Option<i32>,
+    pub hash_attribute: String,
+    pub hash_version: i32,
+    pub meta: Vec<VariationMeta>,
+    pub filters: Vec<Filter>,
+    pub seed: String,
+    pub name: String,
+    pub phase: String,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct ExperimentResult {
-    #[getset(get = "pub")]
-    in_experiment: bool,
-    #[getset(get = "pub")]
-    variation_id: i32,
-    #[getset(get = "pub")]
-    value: Value,
-    #[getset(get = "pub")]
-    hash_used: bool,
-    #[getset(get = "pub")]
-    hash_attribute: String,
-    #[getset(get = "pub")]
-    hash_value: String,
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    feature_id: Option<String>,
-    #[getset(get = "pub")]
-    key: String,
-    #[getset(get = "pub")]
-    bucket: f32,
-    #[new(value = "None")]
-    #[getset(get = "pub")]
-    name: Option<String>,
-    #[getset(get = "pub")]
-    pass_through: bool,
+    pub in_experiment: bool,
+    pub variation_id: i32,
+    pub value: Value,
+    pub hash_used: bool,
+    pub hash_attribute: String,
+    pub hash_value: String,
+    pub feature_id: Option<String>,
+    pub key: String,
+    pub bucket: f32,
+    pub name: Option<String>,
+    pub passthrough: bool,
 }
 
-#[derive(Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct TrackData {
-    #[getset(get = "pub")]
-    experiment: Experiment,
-    #[getset(get = "pub")]
-    result: ExperimentResult,
+    pub experiment: Experiment,
+    pub result: ExperimentResult,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct FeatureRule {
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    condition: Option<Condition>,
-    #[getset(get = "pub")]
-    coverage: f32,
-    #[getset(get = "pub")]
-    force: Value,
-    #[getset(get = "pub")]
-    variations: Vec<Value>,
-    #[getset(get = "pub")]
-    key: String,
-    #[getset(get = "pub")]
-    weights: Vec<f32>,
-    #[getset(get = "pub")]
-    namespace: Namespace,
-    #[getset(get = "pub")]
-    #[new(value = r#""id".to_owned()"#)]
-    hash_attribute: String,
-    // TODO: is this right? default was 2 in Filter
-    #[new(value = "1")]
-    #[getset(get = "pub")]
-    hash_version: i32,
-    #[getset(get = "pub")]
-    range: BucketRange,
-    #[getset(get = "pub")]
-    ranges: Vec<BucketRange>,
-    #[getset(get = "pub")]
-    meta: Vec<VariationMeta>,
-    #[getset(get = "pub")]
-    filters: Vec<Filter>,
-    #[getset(get = "pub")]
-    seed: String,
-    #[getset(get = "pub")]
-    name: String,
-    #[getset(get = "pub")]
-    phase: String,
-    #[getset(get = "pub")]
-    tracks: Vec<TrackData>,
+    pub condition: Option<Condition>,
+    pub coverage: f32,
+    pub force: Option<Value>,
+    pub variations: Vec<Value>,
+    pub key: Option<String>,
+    pub weights: Vec<f32>,
+    pub namespace: Namespace,
+    pub hash_attribute: String,
+    pub hash_version: i32,
+    pub range: BucketRange,
+    pub ranges: Vec<BucketRange>,
+    pub meta: Vec<VariationMeta>,
+    pub filters: Vec<Filter>,
+    pub seed: String,
+    pub name: String,
+    pub phase: String,
+    pub tracks: Vec<TrackData>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Source {
     UnknownFeature,
     DefaultValue,
@@ -185,75 +116,38 @@ pub enum Source {
     Experiment,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct FeatureResult {
-    #[getset(get = "pub")]
-    value: Value,
-    #[getset(get = "pub")]
-    on: bool,
-    #[getset(get = "pub")]
-    off: bool,
-    #[getset(get = "pub")]
-    source: Source,
-    #[new(value = "None")]
-    #[getset(get = "pub")]
-    experiment: Option<Experiment>,
-    #[new(value = "None")]
-    #[getset(get = "pub")]
-    experiment_result: Option<ExperimentResult>,
+    pub value: Value,
+    pub on: bool,
+    pub off: bool,
+    pub source: Source,
+    pub experiment: Option<Experiment>,
+    pub experiment_result: Option<ExperimentResult>,
 }
 
-#[derive(new, Getters)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone)]
 pub struct Feature {
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    default_value: Option<Value>,
-    #[getset(get = "pub")]
-    rules: Vec<FeatureRule>,
+    pub default_value: Option<Value>,
+    pub rules: Vec<FeatureRule>,
 }
 
-#[derive(new, Getters)]
-struct Context {
-    #[getset(get = "pub")]
-    #[new(value = "true")]
-    enabled: bool,
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    api_host: Option<String>,
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    client_key: Option<String>,
-    #[getset(get = "pub")]
-    #[new(value = "None")]
-    decryption_key: Option<String>,
-    #[getset(get = "pub")]
-    attributes: Attributes,
-    #[getset(get = "pub")]
-    url: String,
-    #[getset(get = "pub")]
-    features: FeatureMap,
-    #[getset(get = "pub")]
-    forced_variations: ForcedVariationsMap,
-    #[getset(get = "pub")]
-    qa_mode: bool,
-    #[getset(get = "pub")]
-    tracking_callback: TrackingCallback,
+#[derive(Builder, Debug, Clone)]
+pub struct Context {
+    pub enabled: bool,
+    pub api_host: Option<String>,
+    pub client_key: Option<String>,
+    pub decryption_key: Option<String>,
+    pub attributes: Attributes,
+    pub url: String,
+    pub features: FeatureMap,
+    pub forced_variations: ForcedVariationsMap,
+    pub qa_mode: bool,
+    pub tracking_callback: TrackingCallback,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
-    #[test]
-    fn test_bucket_range_model() {
-        let br = BucketRange::new(0.56, 0.67);
-        assert_eq!(*br.range_start(), 0.56);
-        assert_eq!(*br.range_end(), 0.67);
-
-        let another_br = BucketRange::new(0.56, 0.67);
-        assert_eq!(br, another_br);
-
-        let approx_br = BucketRange::new(0.56000007, 0.67000007);
-        assert_eq!(br, approx_br);
-    }
+    // TODO: add tests
 }

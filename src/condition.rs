@@ -1,8 +1,5 @@
-use std::iter::once;
-
-use serde_json::Value;
-
 use regex::Regex;
+use serde_json::Value;
 
 use crate::model::{Attributes, Condition};
 
@@ -124,26 +121,24 @@ fn elem_match(condition_value: &Value, attribute_value: Option<&Value>) -> bool 
 }
 
 fn padded_version_string(input: &str) -> String {
-    let without_prefix = input.trim_start_matches('v').split('+').next().unwrap();
+    let re = Regex::new(r"(^v|\+.*$)").unwrap();
+    let without_prefix = re.replace_all(input, "").to_string();
 
-    let parts: Vec<&str> = without_prefix.split(|c| c == '-' || c == '.').collect();
-
-    let mut parts = parts
-        .into_iter()
-        .map(|part| part.to_string())
-        .collect::<Vec<String>>();
-
+    let mut parts: Vec<&str> = without_prefix
+        .split(&['-', '.'][..])
+        .filter(|s| !s.is_empty())
+        .collect();
     if parts.len() == 3 {
-        parts.push("~".to_string());
+        parts.push("~");
     }
 
     let padded_parts: Vec<String> = parts
         .iter()
-        .map(|part| {
-            if part.parse::<u32>().is_ok() {
+        .map(|&part| {
+            if part.chars().all(char::is_numeric) {
                 format!("{:0>5}", part)
             } else {
-                part.clone()
+                part.to_string()
             }
         })
         .filter(|s| !s.is_empty())
@@ -203,7 +198,7 @@ fn compare_values(value1: &Value, value2: &Value, operator: &str) -> bool {
     }
 }
 
-fn eval_operator_condition(
+pub(crate) fn eval_operator_condition(
     operator: &str,
     attribute_value: Option<&Value>,
     condition_value: &Value,
@@ -274,11 +269,6 @@ fn eval_operator_condition(
                 != padded_version_string(attribute_value.unwrap().as_str().unwrap())
         }
         "$vgt" => {
-            println!(
-                "{},{}",
-                padded_version_string(attribute_value.unwrap().as_str().unwrap()),
-                padded_version_string(condition_value.as_str().unwrap())
-            );
             padded_version_string(attribute_value.unwrap().as_str().unwrap())
                 > padded_version_string(condition_value.as_str().unwrap())
         }
@@ -287,11 +277,6 @@ fn eval_operator_condition(
                 >= padded_version_string(condition_value.as_str().unwrap())
         }
         "$vlt" => {
-            println!(
-                "{}, {}",
-                padded_version_string(attribute_value.unwrap().as_str().unwrap()),
-                padded_version_string(condition_value.as_str().unwrap())
-            );
             padded_version_string(attribute_value.unwrap().as_str().unwrap())
                 < padded_version_string(condition_value.as_str().unwrap())
         }
