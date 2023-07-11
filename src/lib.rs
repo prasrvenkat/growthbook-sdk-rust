@@ -1,4 +1,5 @@
 mod condition;
+mod growthbook;
 mod model;
 mod util;
 
@@ -13,21 +14,24 @@ mod json_tests {
 
     use serde_json::{from_str, Map, Value};
 
-    use crate::model::{BucketRange, Namespace, NamespaceBuilder};
-    use crate::{condition, util};
+    use crate::growthbook::GrowthBook;
+    use crate::model::{
+        BucketRange, Context, ExperimentResult, FeatureResult, Namespace, NamespaceBuilder,
+    };
+    use crate::{condition, growthbook, util};
 
     fn get_test_case_blob(key: &str) -> Option<Value> {
         let mut content = String::new();
         if let Err(e) =
             File::open("cases.json").and_then(|mut file| file.read_to_string(&mut content))
         {
-            eprintln!("Failed to read test cases file: {}", e);
+            eprintln!("failed to read test cases file: {}", e);
             return None;
         }
         let parsed: Value = match from_str(&content) {
             Ok(parsed) => parsed,
             Err(e) => {
-                eprintln!("Failed to parse JSON: {}", e);
+                eprintln!("failed to parse cases.json: {}", e);
                 return None;
             }
         };
@@ -51,14 +55,14 @@ mod json_tests {
         for tc in choose_variation.iter() {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
-            println!("testing choose_variation - case {}", case_name);
+            println!("case_name: {}", case_name);
             let n: f32 = tc[1].as_f64().unwrap() as f32;
             let ranges: Vec<BucketRange> = serde_json::from_value(tc[2].clone()).unwrap();
             let expected: i32 = tc[3].as_i64().unwrap() as i32;
             let actual = util::choose_variation(n, ranges.as_ref());
             assert_eq!(
                 actual, expected,
-                "choose_variation test case {} failed",
+                "choose_variation test case '{}' failed",
                 case_name
             );
         }
@@ -73,7 +77,7 @@ mod json_tests {
         for tc in decrypt.iter() {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
-            println!("testing decrypt_string - case {}", case_name);
+            println!("case_name: {}", case_name);
             let ciphertext: &str = tc[1].as_str().unwrap();
             let key: &str = tc[2].as_str().unwrap();
             let expected: Option<&str> = tc[3].as_str();
@@ -81,7 +85,7 @@ mod json_tests {
             assert_eq!(
                 actual.as_deref(),
                 expected,
-                "decrypt test case {} failed",
+                "decrypt test case '{}' failed",
                 case_name
             );
         }
@@ -96,7 +100,7 @@ mod json_tests {
         for tc in bucket_range.iter() {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
-            println!("testing bucket_range - case {}", case_name);
+            println!("case_name: {}", case_name);
             let input: &Vec<Value> = tc[1].as_array().unwrap();
             let n: i32 = input[0].as_i64().unwrap() as i32;
             let coverage: f32 = input[1].as_f64().unwrap() as f32;
@@ -110,7 +114,7 @@ mod json_tests {
             let actual = util::get_bucket_ranges(n, coverage, weights);
             assert_eq!(
                 actual, expected,
-                "bucket_range test case {} failed",
+                "bucket_range test case '{}' failed",
                 case_name
             );
         }
@@ -123,12 +127,16 @@ mod json_tests {
 
         let get_equal_weights: &Vec<Value> = get_equal_weights.as_array().unwrap();
         for (i, tc) in get_equal_weights.iter().enumerate() {
+            println!("case_index: {}", i);
             let tc = tc.as_array().unwrap();
-            println!("testing get_equal_weights - case {}", i);
             let n: i32 = tc[0].as_i64().unwrap() as i32;
             let expected: Vec<f32> = serde_json::from_value(tc[1].clone()).unwrap();
             let actual = util::get_equal_weights(n);
-            assert_eq!(actual, expected, "get_equal_weights test case {} failed", i);
+            assert_eq!(
+                actual, expected,
+                "get_equal_weights test case '{}' failed",
+                i
+            );
         }
     }
 
@@ -141,7 +149,7 @@ mod json_tests {
         for tc in get_query_string_override.iter() {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
-            println!("testing get_query_string_override - case {}", case_name);
+            println!("case_name: {}", case_name);
             let id: &str = tc[1].as_str().unwrap();
             let url: &str = tc[2].as_str().unwrap();
             let n: i32 = tc[3].as_i64().unwrap() as i32;
@@ -149,7 +157,7 @@ mod json_tests {
             let actual = util::get_query_string_override(id, url, n);
             assert_eq!(
                 actual, expected,
-                "get_query_string_override test case {} failed",
+                "get_query_string_override test case '{}' failed",
                 case_name
             );
         }
@@ -162,14 +170,14 @@ mod json_tests {
 
         let hash: &Vec<Value> = hash.as_array().unwrap();
         for (i, tc) in hash.iter().enumerate() {
+            println!("case_index: {}", i);
             let tc = tc.as_array().unwrap();
-            println!("testing hash - case {}", i);
             let seed: &str = tc[0].as_str().unwrap();
             let value: &str = tc[1].as_str().unwrap();
             let version: i32 = tc[2].as_i64().unwrap() as i32;
             let expected: Option<f32> = tc[3].as_f64().map(|v| v as f32);
             let actual = util::hash(seed, value, version);
-            assert_eq!(actual, expected, "hash test case {} failed", i);
+            assert_eq!(actual, expected, "hash test case '{}' failed", i);
         }
     }
 
@@ -182,7 +190,7 @@ mod json_tests {
         for tc in in_namespace.iter() {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
-            println!("testing in_namespace - case {}", case_name);
+            println!("case_name: {}", case_name);
             let user_id: &str = tc[1].as_str().unwrap();
             let namespace_arr = tc[2].as_array().unwrap();
             let namespace: Namespace = NamespaceBuilder::default()
@@ -195,7 +203,7 @@ mod json_tests {
             let actual = util::in_namespace(user_id, &namespace);
             assert_eq!(
                 actual, expected,
-                "in_namespace test case {} failed",
+                "in_namespace test case '{}' failed",
                 case_name
             );
         }
@@ -210,14 +218,14 @@ mod json_tests {
         for tc in eval_condition.iter() {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
-            println!("testing eval_condition - case {}", case_name);
+            println!("case_name: {}", case_name);
             let condition: &Value = &tc[1];
             let attributes: &Value = &tc[2];
             let expected: bool = tc[3].as_bool().unwrap();
             let actual = condition::eval_condition(attributes, condition);
             assert_eq!(
                 actual, expected,
-                "eval_condition test case {} failed",
+                "eval_condition test case '{}' failed",
                 case_name
             );
         }
@@ -237,10 +245,9 @@ mod json_tests {
                 &_ => "",
             };
             let cases: &Vec<Value> = v.as_array().unwrap();
-            println!("testing version_compare - case {}", op);
             for (i, tc) in cases.iter().enumerate() {
                 let tc = tc.as_array().unwrap();
-                println!("testing index {}", i);
+                println!("case_name: {}, index: {}", op, i);
                 let attribute: &str = tc[0].as_str().unwrap();
                 let condition: &str = tc[1].as_str().unwrap();
                 let expected: bool = tc[2].as_bool().unwrap();
@@ -251,10 +258,39 @@ mod json_tests {
                 );
                 assert_eq!(
                     actual, expected,
-                    "version_compare test case {}, index {} failed",
+                    "version_compare test case '{}', index '{}' failed",
                     op, i
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_eval_feature() {
+        let eval_feature = get_test_case_blob("feature").unwrap();
+        assert!(eval_feature.is_array());
+
+        let eval_feature: &Vec<Value> = eval_feature.as_array().unwrap();
+        for tc in eval_feature.iter() {
+            let tc = tc.as_array().unwrap();
+            let case_name: &str = tc[0].as_str().unwrap();
+            println!("case_name: {}", case_name);
+            let context: Context =
+                serde_json::from_value(tc[1].clone()).expect("failed to parse context");
+            let key: &str = &tc[2].as_str().unwrap();
+            let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
+            let gb = GrowthBook { context };
+            let actual = gb.eval_feature(key);
+            assert_eq!(
+                actual, expected,
+                "eval_feature test case '{}' failed",
+                case_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_run() {
+        assert!(true);
     }
 }
