@@ -346,4 +346,46 @@ impl GrowthBook {
         }
         result
     }
+
+    pub fn is_on(&self, key: &str) -> bool {
+        self.eval_feature(key).on
+    }
+    pub fn is_off(&self, key: &str) -> bool {
+        self.eval_feature(key).off
+    }
+    pub fn get_feature_value(&self, key: &str, fallback: &Value) -> Value {
+        let value = self.eval_feature(key).value;
+        if value.is_null() {
+            return fallback.clone();
+        }
+        value
+    }
+    pub fn get_feature_value_as_str(&self, key: &str, fallback: &str) -> String {
+        let value = self.eval_feature(key).value;
+        if value.is_null() {
+            return fallback.to_string();
+        }
+        value.as_str().unwrap_or("").to_string()
+    }
+    pub fn get_feature_value_as_int(&self, key: &str, fallback: i64) -> i64 {
+        let value = self.eval_feature(key).value;
+        if value.is_null() {
+            return fallback;
+        }
+        value.as_i64().unwrap_or(fallback)
+    }
+    pub fn get_feature_value_as_bool(&self, key: &str, fallback: bool) -> bool {
+        let value = self.eval_feature(key).value;
+        if value.is_null() {
+            return fallback;
+        }
+        value.as_bool().unwrap_or(fallback)
+    }
+    pub fn get_feature_value_as_float(&self, key: &str, fallback: f64) -> f64 {
+        let value = self.eval_feature(key).value;
+        if value.is_null() {
+            return fallback;
+        }
+        value.as_f64().unwrap_or(fallback)
+    }
 }
