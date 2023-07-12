@@ -1,13 +1,13 @@
 use derive_builder::Builder;
-use serde::{Deserialize, Serialize};
-use serde_json::{to_string, Value};
+use serde::Deserialize;
+use serde_json::Value;
 
 use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
 use crate::model::{
-    Attributes, BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult,
-    ExperimentResultBuilder, FeatureMap, FeatureResult, FeatureResultBuilder, Filter,
-    ForcedVariationsMap, Source, VariationMeta,
+    BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder,
+    FeatureMap, FeatureResult, FeatureResultBuilder, Filter, ForcedVariationsMap, Source,
+    VariationMeta,
 };
 use crate::util;
 use crate::util::{choose_variation, in_range};
@@ -121,13 +121,6 @@ impl GrowthBook {
         feature_id: Option<&str>,
         bucket: Option<f32>,
     ) -> ExperimentResult {
-        println!("get_experiment_result");
-        println!("experiment: {:?}", experiment);
-        println!("variation_index: {:?}", variation_index);
-        println!("hash_used: {:?}", hash_used);
-        println!("feature_id: {:?}", feature_id);
-        println!("bucket: {:?}", bucket);
-
         let mut in_experiment = true;
         let mut variation_index = variation_index.unwrap_or(-1);
         if variation_index < 0 || variation_index >= experiment.variations.len() as i32 {
@@ -250,7 +243,7 @@ impl GrowthBook {
 
     fn run_internal(&self, experiment: &Experiment, id: Option<&str>) -> ExperimentResult {
         if experiment.variations.len() < 2 || !self.context.enabled {
-            self.get_experiment_result(experiment, None, None, id.clone(), None);
+            return self.get_experiment_result(experiment, None, None, id.clone(), None);
         }
         if !self.context.url.is_empty() {
             let qs_override = util::get_query_string_override(
@@ -319,16 +312,6 @@ impl GrowthBook {
                 Some(experiment.weights.clone()),
             ),
         };
-
-        println!(
-            "{} {} {}",
-            &experiment
-                .seed
-                .clone()
-                .unwrap_or(experiment.key.clone().to_string()),
-            hash_value_string,
-            experiment.hash_version.clone().unwrap_or(1)
-        );
         let n = util::hash(
             &experiment
                 .seed
@@ -337,13 +320,12 @@ impl GrowthBook {
             &hash_value_string,
             experiment.hash_version.clone().unwrap_or(1),
         );
-        println!("n: {:?}", n);
         let assigned = choose_variation(n.unwrap_or(1.0), &ranges);
 
         if assigned == -1 {
             return self.get_experiment_result(experiment, None, None, id.clone(), None);
         }
-        if let Some(f) = experiment.force {
+        if let Some(_f) = experiment.force {
             return self.get_experiment_result(
                 experiment,
                 experiment.force,

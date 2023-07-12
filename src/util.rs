@@ -59,9 +59,6 @@ pub fn get_bucket_ranges(
         })
         .unwrap_or_else(|| get_equal_weights(num_variations));
 
-    println!("equalized_weights: {:?}", equalized_weights);
-    println!("cov: {:?}", cov);
-    println!("num_variations: {:?}", num_variations);
     let mut cumulative = 0.0;
     equalized_weights
         .into_iter()

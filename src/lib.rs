@@ -16,7 +16,8 @@ mod json_tests {
 
     use crate::growthbook::GrowthBook;
     use crate::model::{
-        BucketRange, Context, ExperimentResult, FeatureResult, Namespace, NamespaceBuilder,
+        BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult,
+        Namespace, NamespaceBuilder,
     };
     use crate::{condition, growthbook, util};
 
@@ -291,6 +292,44 @@ mod json_tests {
 
     #[test]
     fn test_run() {
-        assert!(true);
+        let run = get_test_case_blob("run").unwrap();
+        assert!(run.is_array());
+
+        let run: &Vec<Value> = run.as_array().unwrap();
+        for tc in run.iter() {
+            let tc = tc.as_array().unwrap();
+            let case_name: &str = tc[0].as_str().unwrap();
+            println!("case_name: {}", case_name);
+            let context: Context =
+                serde_json::from_value(tc[1].clone()).expect("failed to parse context");
+            let experiment: Experiment =
+                serde_json::from_value(tc[2].clone()).expect("failed to parse experiment");
+            let value: Value = tc[3].clone();
+            let in_experiment: bool = tc[4].as_bool().expect("failed to parse in_experiment");
+            let hash_used: bool = tc[5].as_bool().expect("failed to parse hash_used");
+            let expected: ExperimentResult = ExperimentResultBuilder::default()
+                .value(value)
+                .in_experiment(in_experiment)
+                .hash_used(hash_used)
+                .build()
+                .expect("failed to build experiment result");
+            let gb = GrowthBook { context };
+            let actual = gb.run(&experiment);
+            assert_eq!(
+                actual.value, expected.value,
+                "run test case '{}' failed for value",
+                case_name
+            );
+            assert_eq!(
+                actual.in_experiment, expected.in_experiment,
+                "run test case '{}' failed for in_experiment",
+                case_name
+            );
+            assert_eq!(
+                actual.hash_used, expected.hash_used,
+                "run test case '{}' failed for hash_used",
+                case_name
+            );
+        }
     }
 }
