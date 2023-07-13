@@ -1,6 +1,7 @@
 [package]
 name = "growthbook-sdk-rust"
-version = "0.1.0"
+# should match model.rs SDK_VERSION
+version = "0.0.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -13,3 +14,8 @@ url = "2.4.0"
 data-encoding = "2.4.0"
 openssl = "0.10.54"
 regex = "1.8.4"
+log = "0.4.19"
+reqwest = { version = "0.11.18", features = ["json", "blocking"] }
+
+[dev-dependencies]
+async-std = "1.12.0"

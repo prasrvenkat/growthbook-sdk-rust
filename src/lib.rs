@@ -14,7 +14,7 @@ mod json_tests {
 
     use serde_json::{from_str, Map, Value};
 
-    use crate::growthbook::GrowthBook;
+    use crate::growthbook::{GrowthBook, GrowthBookBuilder};
     use crate::model::{
         BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult,
         Namespace, NamespaceBuilder,
@@ -280,7 +280,10 @@ mod json_tests {
                 serde_json::from_value(tc[1].clone()).expect("failed to parse context");
             let key: &str = &tc[2].as_str().unwrap();
             let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
-            let gb = GrowthBook { context };
+            let gb = GrowthBookBuilder::default()
+                .context(context)
+                .build()
+                .unwrap();
             let actual = gb.eval_feature(key);
             assert_eq!(
                 actual, expected,
@@ -313,7 +316,10 @@ mod json_tests {
                 .hash_used(hash_used)
                 .build()
                 .expect("failed to build experiment result");
-            let gb = GrowthBook { context };
+            let gb = GrowthBookBuilder::default()
+                .context(context)
+                .build()
+                .expect("failed to build GrowthBook");
             let actual = gb.run(&experiment);
             assert_eq!(
                 actual.value, expected.value,

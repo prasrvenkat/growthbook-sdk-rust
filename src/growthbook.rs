@@ -1,16 +1,20 @@
 use derive_builder::Builder;
+use log::error;
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::time::Duration;
 
 use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
 use crate::model::{
     BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder,
-    FeatureMap, FeatureResult, FeatureResultBuilder, Filter, ForcedVariationsMap, Source,
-    VariationMeta,
+    FeatureMap, FeatureResult, FeatureResultBuilder, Filter, Source,
 };
 use crate::util;
 use crate::util::{choose_variation, in_range};
+
+// should match cargo.toml
+pub const SDK_VERSION: &str = "0.0.1";
 
 #[derive(Builder, Deserialize)]
 pub struct GrowthBook {
@@ -18,6 +22,61 @@ pub struct GrowthBook {
 }
 
 impl GrowthBook {
+    pub async fn load_features(&mut self, timeout_seconds: Option<u64>) {
+        if let Some(key) = &self.context.client_key {
+            let api_host = self
+                .context
+                .api_host
+                .as_deref()
+                .unwrap_or("https://cdn.growthbook.io")
+                .trim_end_matches('/');
+            let url = format!("{}/api/features/{}", api_host, key);
+            let client = reqwest::blocking::Client::new();
+            // 10s default timeout
+            let timeout = Duration::from_secs(timeout_seconds.unwrap_or(10));
+
+            let res = match client
+                .get(url)
+                .header("User-Agent", format!("growthbook-sdk-rust/{}", SDK_VERSION))
+                .timeout(timeout)
+                .send()
+            {
+                Ok(res) => res.json().unwrap_or_else(|e| {
+                    error!("Error parsing response: {}", e);
+                    json!({ "features": {} })
+                }),
+                Err(e) => {
+                    error!("Error fetching features: {}", e);
+                    json!({ "features": {} })
+                }
+            };
+
+            if let Some(encrypted) = res.get("encryptedFeatures").and_then(Value::as_str) {
+                if let Some(decryption_key) = &self.context.decryption_key {
+                    if let Some(features) = util::decrypt_string(encrypted, decryption_key) {
+                        self.context.features =
+                            serde_json::from_str(&features).unwrap_or_else(|e| {
+                                error!("Error parsing features: {}", e);
+                                FeatureMap::default()
+                            });
+                    } else {
+                        error!("Error decrypting features");
+                    }
+                } else {
+                    error!("Decryption key not set, but found encrypted features");
+                }
+            } else if let Some(features) = res.get("features") {
+                self.context.features =
+                    serde_json::from_value(features.clone()).unwrap_or_else(|e| {
+                        error!("Error parsing features: {}", e);
+                        FeatureMap::default()
+                    });
+            } else {
+                error!("No features found");
+            }
+        }
+    }
+
     fn get_feature_result(
         &self,
         value: Value,
@@ -25,20 +84,13 @@ impl GrowthBook {
         experiment: Option<Experiment>,
         experiment_result: Option<ExperimentResult>,
     ) -> FeatureResult {
-        let on;
-        let off;
-        if value.is_null()
-            || (value.is_boolean() && !value.as_bool().unwrap())
-            || (value.is_string() && value.as_str().unwrap().is_empty())
-            || (value.is_i64() && value.as_i64().unwrap() == 0)
-            || (value.is_f64() && value.as_f64().unwrap() == 0.0)
-        {
-            on = false;
-            off = true;
-        } else {
-            on = true;
-            off = false;
-        }
+        let on = !value.is_null()
+            && !(value.is_boolean() && !value.as_bool().unwrap())
+            && !(value.is_string() && value.as_str().unwrap().is_empty())
+            && !(value.is_i64() && value.as_i64().unwrap() == 0)
+            && !(value.is_f64() && value.as_f64().unwrap() == 0.0);
+        let off = !on;
+
         let fr = FeatureResultBuilder::default()
             .value(value)
             .on(on)
@@ -101,8 +153,8 @@ impl GrowthBook {
         }
 
         if let Some(n_value) = util::hash(seed, hash_value, hash_version) {
-            if range.is_some() {
-                return in_range(n_value, range.as_ref().unwrap());
+            if let Some(range_value) = range {
+                return in_range(n_value, range_value);
             }
             if let Some(coverage_value) = coverage {
                 return n_value <= *coverage_value;
@@ -387,5 +439,49 @@ impl GrowthBook {
             return fallback;
         }
         value.as_f64().unwrap_or(fallback)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::ContextBuilder;
+    use async_std::task;
+
+    #[test]
+    fn test_load_features_normal() {
+        // TODO: hack - currently using the key from java example
+        let context = ContextBuilder::default()
+            .client_key(Some(
+                "java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string(),
+            ))
+            .build()
+            .expect("unable to build context");
+        assert_eq!(context.features.len(), 0);
+
+        let mut gb = GrowthBookBuilder::default()
+            .context(context)
+            .build()
+            .expect("unable to build gb");
+        task::block_on(gb.load_features(None));
+        assert_eq!(gb.context.features.len(), 5);
+    }
+
+    #[test]
+    fn test_load_features_encrypted() {
+        // TODO: hack - currently using the key from java example
+        let context = ContextBuilder::default()
+            .client_key(Some("sdk-862b5mHcP9XPugqD".to_string()))
+            .decryption_key(Some("BhB1wORFmZLTDjbvstvS8w==".to_string()))
+            .build()
+            .expect("unable to build context");
+        assert_eq!(context.features.len(), 0);
+
+        let mut gb = GrowthBookBuilder::default()
+            .context(context)
+            .build()
+            .expect("unable to build gb");
+        task::block_on(gb.load_features(None));
+        assert_eq!(gb.context.features.len(), 1);
     }
 }

@@ -166,7 +166,7 @@ fn is_in(condition_value: &Value, attribute_value: Option<&Value>) -> bool {
     }
 }
 
-fn compare_values(value1: &Value, value2: &Value, operator: &str) -> bool {
+pub(crate) fn compare_values(value1: &Value, value2: &Value, operator: &str) -> bool {
     match (value1, value2) {
         (Value::Number(num1), Value::Number(num2)) => {
             let num1 = num1.as_f64();
@@ -285,5 +285,79 @@ pub(crate) fn eval_operator_condition(
                 <= padded_version_string(condition_value.as_str().unwrap())
         }
         _ => false,
+    }
+}
+
+mod tests {
+    use serde_json::json;
+
+    use crate::model::BucketRange;
+
+    use super::*;
+
+    #[test]
+    fn test_compare_values_mismatched_types() {
+        assert_eq!(compare_values(&json!(45), &json!("something"), "=="), false);
+        assert_eq!(compare_values(&json!(45.67), &json!(true), "!="), false);
+        assert_eq!(
+            compare_values(&json!(BucketRange::default()), &json!("something"), ">"),
+            false
+        );
+        assert_eq!(
+            compare_values(&json!("other thing"), &json!(3.1415f32), "<"),
+            false
+        );
+    }
+
+    #[test]
+    fn test_compare_values_matching_numbers() {
+        assert_eq!(compare_values(&json!(45), &json!(45), "=="), true);
+        assert_eq!(compare_values(&json!(45), &json!(45), ">="), true);
+        assert_eq!(compare_values(&json!(45), &json!(45), "<="), true);
+        assert_eq!(compare_values(&json!(45), &json!(45), ">"), false);
+        assert_eq!(compare_values(&json!(45), &json!(45), "<"), false);
+        assert_eq!(compare_values(&json!(45), &json!(45), "!="), false);
+
+        assert_eq!(compare_values(&json!(45.67), &json!(45.67), "=="), true);
+        assert_eq!(compare_values(&json!(45.67), &json!(45.67), ">="), true);
+        assert_eq!(compare_values(&json!(45.67), &json!(45.67), "<="), true);
+        assert_eq!(compare_values(&json!(45.67), &json!(45.67), ">"), false);
+        assert_eq!(compare_values(&json!(45.67), &json!(45.67), "<"), false);
+        assert_eq!(compare_values(&json!(45.67), &json!(45.67), "!="), false);
+
+        assert_eq!(compare_values(&json!(45_i32), &json!(45_i64), "=="), true);
+        assert_eq!(compare_values(&json!(45_u64), &json!(45_f32), ">="), true);
+        assert_eq!(
+            compare_values(&json!(45.66_f64), &json!(45.67_f32), "<="),
+            true
+        );
+    }
+
+    #[test]
+    fn test_compare_matching_strings() {
+        assert_eq!(
+            compare_values(&json!("something"), &json!("something"), "=="),
+            true
+        );
+        assert_eq!(
+            compare_values(&json!("something"), &json!("something"), "!="),
+            false
+        );
+        assert_eq!(
+            compare_values(&json!("something"), &json!("something"), ">="),
+            true
+        );
+        assert_eq!(
+            compare_values(&json!("something"), &json!("something"), "<="),
+            true
+        );
+        assert_eq!(
+            compare_values(&json!("something"), &json!("SOMETHING"), ">"),
+            true
+        );
+        assert_eq!(
+            compare_values(&json!("something"), &json!("SOMETHING"), "<"),
+            false
+        );
     }
 }
