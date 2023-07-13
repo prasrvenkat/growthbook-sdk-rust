@@ -31,15 +31,14 @@ pub struct FeatureRepository {
     pub ttl_seconds: u64,
     #[builder(default = "10")]
     pub timeout: u64,
-    #[builder(default = "0")]
-    pub refreshed_at: u64,
+    pub refreshed_at: Arc<RwLock<u64>>,
     pub refresh_callbacks: Arc<RwLock<Vec<FeatureRefreshCallback>>>,
     pub features: Arc<RwLock<FeatureMap>>,
 }
 
 impl FeatureRepository {
     fn is_cache_expired(&self) -> bool {
-        self.refreshed_at + self.ttl_seconds
+        *self.refreshed_at.read().unwrap() + self.ttl_seconds
             < SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
@@ -121,7 +120,8 @@ impl FeatureRepository {
             for callback in callbacks.iter() {
                 (callback.0)(self.features.read().unwrap().clone());
             }
-            self.refreshed_at = SystemTime::now()
+            let mut refreshed_at = self.refreshed_at.write().unwrap();
+            *refreshed_at = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
@@ -228,7 +228,7 @@ mod tests {
         unsafe {
             COUNT = 0;
         }
-        gb.refreshed_at = 0;
+        *gb.refreshed_at.write().unwrap() = 0;
         gb.clear_refresh_callbacks();
         gb.get_features(true);
         assert_eq!(unsafe { COUNT }, 0);
