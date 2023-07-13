@@ -1,8 +1,9 @@
+use std::time::Duration;
+
 use derive_builder::Builder;
 use log::error;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::time::Duration;
 
 use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
@@ -22,61 +23,6 @@ pub struct GrowthBook {
 }
 
 impl GrowthBook {
-    pub async fn load_features(&mut self, timeout_seconds: Option<u64>) {
-        if let Some(key) = &self.context.client_key {
-            let api_host = self
-                .context
-                .api_host
-                .as_deref()
-                .unwrap_or("https://cdn.growthbook.io")
-                .trim_end_matches('/');
-            let url = format!("{}/api/features/{}", api_host, key);
-            let client = reqwest::blocking::Client::new();
-            // 10s default timeout
-            let timeout = Duration::from_secs(timeout_seconds.unwrap_or(10));
-
-            let res = match client
-                .get(url)
-                .header("User-Agent", format!("growthbook-sdk-rust/{}", SDK_VERSION))
-                .timeout(timeout)
-                .send()
-            {
-                Ok(res) => res.json().unwrap_or_else(|e| {
-                    error!("Error parsing response: {}", e);
-                    json!({ "features": {} })
-                }),
-                Err(e) => {
-                    error!("Error fetching features: {}", e);
-                    json!({ "features": {} })
-                }
-            };
-
-            if let Some(encrypted) = res.get("encryptedFeatures").and_then(Value::as_str) {
-                if let Some(decryption_key) = &self.context.decryption_key {
-                    if let Some(features) = util::decrypt_string(encrypted, decryption_key) {
-                        self.context.features =
-                            serde_json::from_str(&features).unwrap_or_else(|e| {
-                                error!("Error parsing features: {}", e);
-                                FeatureMap::default()
-                            });
-                    } else {
-                        error!("Error decrypting features");
-                    }
-                } else {
-                    error!("Decryption key not set, but found encrypted features");
-                }
-            } else if let Some(features) = res.get("features") {
-                self.context.features =
-                    serde_json::from_value(features.clone()).unwrap_or_else(|e| {
-                        error!("Error parsing features: {}", e);
-                        FeatureMap::default()
-                    });
-            } else {
-                error!("No features found");
-            }
-        }
-    }
-
     fn get_feature_result(
         &self,
         value: Value,
@@ -218,10 +164,11 @@ impl GrowthBook {
     }
 
     pub fn eval_feature(&self, key: &str) -> FeatureResult {
-        if !self.context.features.contains_key(key) {
+        let features = self.context.features.read().unwrap();
+        if !features.contains_key(key) {
             return self.get_feature_result(Value::Null, Source::UnknownFeature, None, None);
         }
-        let feature = self.context.features.get(key).unwrap();
+        let feature = features.get(key).unwrap();
         for rule in feature.rules.iter() {
             if let Some(condition) = &rule.condition {
                 if !eval_condition(&self.context.attributes, condition) {
@@ -439,49 +386,5 @@ impl GrowthBook {
             return fallback;
         }
         value.as_f64().unwrap_or(fallback)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::ContextBuilder;
-    use async_std::task;
-
-    #[test]
-    fn test_load_features_normal() {
-        // TODO: hack - currently using the key from java example
-        let context = ContextBuilder::default()
-            .client_key(Some(
-                "java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string(),
-            ))
-            .build()
-            .expect("unable to build context");
-        assert_eq!(context.features.len(), 0);
-
-        let mut gb = GrowthBookBuilder::default()
-            .context(context)
-            .build()
-            .expect("unable to build gb");
-        task::block_on(gb.load_features(None));
-        assert_eq!(gb.context.features.len(), 5);
-    }
-
-    #[test]
-    fn test_load_features_encrypted() {
-        // TODO: hack - currently using the key from java example
-        let context = ContextBuilder::default()
-            .client_key(Some("sdk-862b5mHcP9XPugqD".to_string()))
-            .decryption_key(Some("BhB1wORFmZLTDjbvstvS8w==".to_string()))
-            .build()
-            .expect("unable to build context");
-        assert_eq!(context.features.len(), 0);
-
-        let mut gb = GrowthBookBuilder::default()
-            .context(context)
-            .build()
-            .expect("unable to build gb");
-        task::block_on(gb.load_features(None));
-        assert_eq!(gb.context.features.len(), 1);
     }
 }

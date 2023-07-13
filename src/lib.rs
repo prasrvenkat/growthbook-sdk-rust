@@ -1,6 +1,7 @@
 mod condition;
 mod growthbook;
 mod model;
+mod repository;
 mod util;
 
 pub fn add(left: usize, right: usize) -> usize {

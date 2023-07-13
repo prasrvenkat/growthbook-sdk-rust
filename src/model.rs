@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 use derive_builder::Builder;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -220,7 +221,7 @@ pub struct Feature {
     pub rules: Vec<FeatureRule>,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default)]
 #[builder(default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Context {
@@ -232,11 +233,33 @@ pub struct Context {
     pub decryption_key: Option<String>,
     pub attributes: Attributes,
     pub url: String,
-    pub features: FeatureMap,
+    #[serde(
+        deserialize_with = "deserialize_arc_rwlock",
+        serialize_with = "serialize_arc_rwlock"
+    )]
+    pub features: Arc<RwLock<FeatureMap>>,
     pub forced_variations: ForcedVariationsMap,
     pub qa_mode: bool,
     #[serde(skip)]
     pub tracking_callback: Option<TrackingCallback>,
+}
+
+fn deserialize_arc_rwlock<'de, D, T>(deserializer: D) -> Result<Arc<RwLock<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let inner_struct: T = Deserialize::deserialize(deserializer)?;
+    Ok(Arc::new(RwLock::new(inner_struct)))
+}
+
+fn serialize_arc_rwlock<S, T>(data: &Arc<RwLock<T>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    let inner_struct = data.read().unwrap();
+    inner_struct.serialize(serializer)
 }
 
 const fn context_enabled() -> bool {
