@@ -1,8 +1,8 @@
-mod condition;
-mod growthbook;
-mod model;
-mod repository;
-mod util;
+pub mod condition;
+pub mod growthbook;
+pub mod model;
+pub mod repository;
+pub mod util;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
@@ -15,7 +15,7 @@ mod json_tests {
 
     use serde_json::{from_str, Map, Value};
 
-    use crate::growthbook::{GrowthBook, GrowthBookBuilder};
+    use crate::growthbook::GrowthBook;
     use crate::model::{
         BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult,
         Namespace, NamespaceBuilder,
@@ -281,10 +281,10 @@ mod json_tests {
                 serde_json::from_value(tc[1].clone()).expect("failed to parse context");
             let key: &str = &tc[2].as_str().unwrap();
             let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
-            let gb = GrowthBookBuilder::default()
-                .context(context)
-                .build()
-                .unwrap();
+            let gb = GrowthBook {
+                context,
+                tracking_callback: None,
+            };
             let actual = gb.eval_feature(key);
             assert_eq!(
                 actual, expected,
@@ -317,10 +317,10 @@ mod json_tests {
                 .hash_used(hash_used)
                 .build()
                 .expect("failed to build experiment result");
-            let gb = GrowthBookBuilder::default()
-                .context(context)
-                .build()
-                .expect("failed to build GrowthBook");
+            let gb = GrowthBook {
+                context,
+                tracking_callback: None,
+            };
             let actual = gb.run(&experiment);
             assert_eq!(
                 actual.value, expected.value,

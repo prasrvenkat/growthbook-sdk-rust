@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
-use async_std::task;
 use derive_builder::Builder;
 use log::error;
 use reqwest::blocking::Client;
@@ -13,7 +12,7 @@ use crate::growthbook::SDK_VERSION;
 use crate::model::FeatureMap;
 use crate::util;
 
-pub struct FeatureRefreshCallback(Box<dyn Fn(FeatureMap) + Send + Sync>);
+pub struct FeatureRefreshCallback(pub Box<dyn Fn(FeatureMap) + Send + Sync>);
 
 impl Debug for FeatureRefreshCallback {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -61,7 +60,7 @@ impl FeatureRepository {
             if wait {
                 self_clone.load_features(self_clone.timeout);
             } else {
-                task::spawn_blocking(move || self_clone.load_features(self_clone.timeout));
+                std::thread::spawn(move || self_clone.load_features(self_clone.timeout));
             }
         }
         self.features.read().unwrap().clone()
@@ -132,14 +131,6 @@ impl FeatureRepository {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-    use std::sync::{Barrier, Mutex};
-
-    use async_std::task;
-
-    use crate::model::ContextBuilder;
-
     use super::*;
 
     #[test]

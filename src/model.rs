@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
 use derive_builder::Builder;
@@ -9,7 +11,14 @@ pub type Attributes = Value;
 pub type Condition = Value;
 pub type FeatureMap = HashMap<String, Feature>;
 pub type ForcedVariationsMap = HashMap<String, i32>;
-pub type TrackingCallback = fn(&Experiment, &ExperimentResult);
+
+pub struct TrackingCallback(pub Box<dyn Fn(Experiment, ExperimentResult) + Send + Sync>);
+
+impl Debug for TrackingCallback {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<callback_function>")
+    }
+}
 
 #[derive(Builder, Debug, Clone, Default)]
 #[builder(default)]
@@ -221,7 +230,7 @@ pub struct Feature {
     pub rules: Vec<FeatureRule>,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Builder, Serialize, Deserialize, Debug, Default)]
 #[builder(default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Context {
@@ -233,33 +242,9 @@ pub struct Context {
     pub decryption_key: Option<String>,
     pub attributes: Attributes,
     pub url: String,
-    #[serde(
-        deserialize_with = "deserialize_arc_rwlock",
-        serialize_with = "serialize_arc_rwlock"
-    )]
-    pub features: Arc<RwLock<FeatureMap>>,
+    pub features: FeatureMap,
     pub forced_variations: ForcedVariationsMap,
     pub qa_mode: bool,
-    #[serde(skip)]
-    pub tracking_callback: Option<TrackingCallback>,
-}
-
-fn deserialize_arc_rwlock<'de, D, T>(deserializer: D) -> Result<Arc<RwLock<T>>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    let inner_struct: T = Deserialize::deserialize(deserializer)?;
-    Ok(Arc::new(RwLock::new(inner_struct)))
-}
-
-fn serialize_arc_rwlock<S, T>(data: &Arc<RwLock<T>>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-    T: Serialize,
-{
-    let inner_struct = data.read().unwrap();
-    inner_struct.serialize(serializer)
 }
 
 const fn context_enabled() -> bool {

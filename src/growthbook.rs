@@ -9,7 +9,7 @@ use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
 use crate::model::{
     BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder,
-    FeatureMap, FeatureResult, FeatureResultBuilder, Filter, Source,
+    FeatureMap, FeatureResult, FeatureResultBuilder, Filter, Source, TrackingCallback,
 };
 use crate::util;
 use crate::util::{choose_variation, in_range};
@@ -17,9 +17,9 @@ use crate::util::{choose_variation, in_range};
 // should match cargo.toml
 pub const SDK_VERSION: &str = "0.0.1";
 
-#[derive(Builder, Deserialize)]
 pub struct GrowthBook {
     pub context: Context,
+    pub tracking_callback: Option<TrackingCallback>,
 }
 
 impl GrowthBook {
@@ -164,11 +164,10 @@ impl GrowthBook {
     }
 
     pub fn eval_feature(&self, key: &str) -> FeatureResult {
-        let features = self.context.features.read().unwrap();
-        if !features.contains_key(key) {
+        if !self.context.features.contains_key(key) {
             return self.get_feature_result(Value::Null, Source::UnknownFeature, None, None);
         }
-        let feature = features.get(key).unwrap();
+        let feature = self.context.features.get(key).unwrap();
         for rule in feature.rules.iter() {
             if let Some(condition) = &rule.condition {
                 if !eval_condition(&self.context.attributes, condition) {
@@ -193,8 +192,8 @@ impl GrowthBook {
                     continue;
                 }
                 for td in rule.tracks.iter() {
-                    if let Some(tc) = self.context.tracking_callback {
-                        tc(&td.experiment, &td.result);
+                    if let Some(tc) = &self.tracking_callback {
+                        (tc.0)(td.experiment.clone(), td.result.clone());
                     }
                 }
                 return self.get_feature_result(force.clone(), Source::Force, None, None);
@@ -340,8 +339,8 @@ impl GrowthBook {
 
         let result =
             self.get_experiment_result(experiment, Some(assigned), Some(true), id.clone(), n);
-        if let Some(tc) = self.context.tracking_callback {
-            tc(experiment, &result);
+        if let Some(tc) = &self.tracking_callback {
+            (tc.0)(experiment.clone(), result.clone());
         }
         result
     }
