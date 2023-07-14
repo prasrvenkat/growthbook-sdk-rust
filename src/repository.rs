@@ -1,10 +1,10 @@
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
+use std::sync::{Arc, LockResult, RwLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use derive_builder::Builder;
-use log::error;
+use log::{error, warn};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 
@@ -38,19 +38,36 @@ pub struct FeatureRepository {
 
 impl FeatureRepository {
     fn is_cache_expired(&self) -> bool {
-        *self.refreshed_at.read().unwrap() + self.ttl_seconds
-            < SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-    }
+        match self.refreshed_at.read() {
+            Ok(refreshed_at) => {
+                let expiration_time = *refreshed_at + self.ttl_seconds;
 
+                match SystemTime::now().duration_since(UNIX_EPOCH) {
+                    Ok(duration) => expiration_time < duration.as_secs(),
+                    Err(_) => {
+                        error!("Error getting current time");
+                        false
+                    }
+                }
+            }
+            Err(_) => {
+                error!("Error getting last refresh time");
+                false
+            }
+        }
+    }
     pub fn add_refresh_callback(&mut self, callback: FeatureRefreshCallback) {
-        self.refresh_callbacks.write().unwrap().push(callback);
+        match self.refresh_callbacks.write() {
+            Ok(mut refresh_callbacks) => refresh_callbacks.push(callback),
+            Err(e) => error!("Error adding refresh callback: {}", e),
+        }
     }
 
     pub fn clear_refresh_callbacks(&mut self) {
-        self.refresh_callbacks.write().unwrap().clear();
+        match self.refresh_callbacks.write() {
+            Ok(mut refresh_callbacks) => refresh_callbacks.clear(),
+            Err(_) => error!("Error clearing refresh callbacks"),
+        }
     }
 
     pub fn get_features(&mut self, wait: bool) -> FeatureMap {
@@ -62,7 +79,13 @@ impl FeatureRepository {
                 std::thread::spawn(move || self_clone.load_features(self_clone.timeout));
             }
         }
-        self.features.read().unwrap().clone()
+        match self.features.read() {
+            Ok(features) => features.clone(),
+            Err(e) => {
+                error!("Error reading features: {}", e);
+                FeatureMap::default()
+            }
+        }
     }
 
     fn load_features(&mut self, timeout_seconds: u64) {
@@ -90,41 +113,75 @@ impl FeatureRepository {
             if let Some(encrypted) = res.get("encryptedFeatures").and_then(Value::as_str) {
                 if let Some(decryption_key) = &self.decryption_key {
                     if let Some(features) = util::decrypt_string(encrypted, decryption_key) {
-                        let mut self_features = self.features.write().unwrap();
-                        *self_features = serde_json::from_str(&features).unwrap_or_else(|e| {
-                            error!("Error parsing features: {}", e);
-                            FeatureMap::default()
-                        });
+                        match self.features.write() {
+                            Ok(mut self_features) => {
+                                *self_features = serde_json::from_str(&features).unwrap_or_else(|e| {
+                                    error!("Error parsing features: {}", e);
+                                    FeatureMap::default()
+                                })
+                            }
+                            Err(_) => {
+                                error!("Error writing features")
+                            }
+                        }
                         refreshed = true;
                     } else {
                         error!("Error decrypting features");
                     }
                 } else {
-                    error!("Decryption key not set, but found encrypted features");
+                    warn!("Decryption key not set, but found encrypted features");
                 }
             } else if let Some(features) = res.get("features") {
-                let mut self_features = self.features.write().unwrap();
-                *self_features = serde_json::from_value(features.clone()).unwrap_or_else(|e| {
-                    error!("Error parsing features: {}", e);
-                    FeatureMap::default()
-                });
+                match self.features.write() {
+                    Ok(mut self_features) => {
+                        *self_features = serde_json::from_value(features.clone()).unwrap_or_else(|e| {
+                            error!("Error parsing features: {}", e);
+                            FeatureMap::default()
+                        })
+                    }
+                    Err(_) => {
+                        error!("Error writing features")
+                    }
+                }
                 refreshed = true;
             } else {
-                error!("No features found");
+                warn!("No features found");
             }
         } else {
-            error!("Client key not set");
+            warn!("Client key not set");
         }
         if refreshed {
-            let callbacks = self.refresh_callbacks.read().unwrap();
-            for callback in callbacks.iter() {
-                (callback.0)(self.features.read().unwrap().clone());
+            match self.refresh_callbacks.read() {
+                Ok(callbacks) => {
+                    for callback in callbacks.iter() {
+                        match self.features.read() {
+                            Ok(features) => {
+                                (callback.0)(features.clone());
+                            }
+                            Err(_) => {
+                                error!("Error reading features for refresh callbacks")
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    error!("Error reading refresh callbacks")
+                }
             }
-            let mut refreshed_at = self.refreshed_at.write().unwrap();
-            *refreshed_at = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+
+            match self.refreshed_at.write() {
+                Ok(mut refreshed_at) => match SystemTime::now().duration_since(UNIX_EPOCH) {
+                    Ok(duration) => {
+                        *refreshed_at = duration.as_secs();
+                    }
+                    Err(_) => {
+                        error!("Error getting current time")
+                    }
+                },
+                Err(_) => {
+                    error!("Error setting last refresh time")
+                }
+            }
         }
     }
 }
@@ -137,9 +194,7 @@ mod tests {
     fn test_load_features_normal() {
         // TODO: hack - currently using the key from java example
         let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some(
-                "java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string(),
-            ))
+            .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
             .build()
             .expect("unable to build gb");
         assert_eq!(gb.features.read().unwrap().len(), 0);
@@ -164,15 +219,12 @@ mod tests {
     fn test_single_callback() {
         static mut COUNT: u32 = 0;
         // unsafe is fine here, just for testing
-        let callback: FeatureRefreshCallback =
-            FeatureRefreshCallback(Box::new(move |features| unsafe {
-                assert_eq!(features.len(), 5);
-                COUNT += 1;
-            }));
+        let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 5);
+            COUNT += 1;
+        }));
         let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some(
-                "java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string(),
-            ))
+            .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
             .build()
             .expect("unable to build gb");
         gb.add_refresh_callback(callback);
@@ -184,21 +236,17 @@ mod tests {
     fn test_multiple_callback() {
         static mut COUNT: u32 = 0;
         // TODO: unsafe is fine here, just for testing. Still better way?
-        let callback_one: FeatureRefreshCallback =
-            FeatureRefreshCallback(Box::new(move |features| unsafe {
-                assert_eq!(features.len(), 5);
-                COUNT += 1;
-            }));
-        let callback_two: FeatureRefreshCallback =
-            FeatureRefreshCallback(Box::new(move |features| unsafe {
-                assert_eq!(features.len(), 5);
-                COUNT += 1;
-            }));
+        let callback_one: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 5);
+            COUNT += 1;
+        }));
+        let callback_two: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 5);
+            COUNT += 1;
+        }));
 
         let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some(
-                "java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string(),
-            ))
+            .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
             .build()
             .expect("unable to build gb");
         gb.add_refresh_callback(callback_one);
@@ -211,11 +259,10 @@ mod tests {
     fn test_clear_callback() {
         static mut COUNT: u32 = 0;
         // TODO: unsafe is fine here, just for testing. Still better way?
-        let callback: FeatureRefreshCallback =
-            FeatureRefreshCallback(Box::new(move |features| unsafe {
-                assert_eq!(features.len(), 1);
-                COUNT += 1;
-            }));
+        let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 1);
+            COUNT += 1;
+        }));
         let mut gb = FeatureRepositoryBuilder::default()
             .client_key(Some("sdk-862b5mHcP9XPugqD".to_string()))
             .decryption_key(Some("BhB1wORFmZLTDjbvstvS8w==".to_string()))

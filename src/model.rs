@@ -44,20 +44,14 @@ impl<'de> Deserialize<'de> for BucketRange {
     where
         D: Deserializer<'de>,
     {
-        Deserialize::deserialize(deserializer).map(|BucketRangeInternal(range_start, range_end)| {
-            BucketRange {
-                range_start,
-                range_end,
-            }
-        })
+        Deserialize::deserialize(deserializer).map(|BucketRangeInternal(range_start, range_end)| BucketRange { range_start, range_end })
     }
 }
 
 impl PartialEq for BucketRange {
     fn eq(&self, other: &Self) -> bool {
         let tolerance = 0.001f32;
-        (self.range_start - other.range_start).abs() < tolerance
-            && (self.range_end - other.range_end).abs() < f32::EPSILON
+        (self.range_start - other.range_start).abs() < tolerance && (self.range_end - other.range_end).abs() < f32::EPSILON
     }
 }
 
@@ -95,13 +89,7 @@ impl<'de> Deserialize<'de> for Namespace {
     where
         D: Deserializer<'de>,
     {
-        Deserialize::deserialize(deserializer).map(
-            |NamespaceInternal(id, range_start, range_end)| Namespace {
-                id,
-                range_start,
-                range_end,
-            },
-        )
+        Deserialize::deserialize(deserializer).map(|NamespaceInternal(id, range_start, range_end)| Namespace { id, range_start, range_end })
     }
 }
 

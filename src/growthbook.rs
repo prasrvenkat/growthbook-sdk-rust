@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
 use crate::model::{
-    BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder,
-    FeatureMap, FeatureResult, FeatureResultBuilder, Filter, Source, TrackingCallback,
+    BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder, Feature, FeatureMap, FeatureResult,
+    FeatureResultBuilder, Filter, Source, TrackingCallback,
 };
 use crate::util;
 use crate::util::{choose_variation, in_range};
@@ -30,12 +30,16 @@ impl GrowthBook {
         experiment: Option<Experiment>,
         experiment_result: Option<ExperimentResult>,
     ) -> FeatureResult {
-        let on = !value.is_null()
-            && !(value.is_boolean() && !value.as_bool().unwrap())
-            && !(value.is_string() && value.as_str().unwrap().is_empty())
-            && !(value.is_i64() && value.as_i64().unwrap() == 0)
-            && !(value.is_f64() && value.as_f64().unwrap() == 0.0);
+        let on = match &value {
+            Value::Null => false,
+            Value::Bool(b) => *b,
+            Value::String(s) => !s.is_empty(),
+            Value::Number(n) => n.as_f64().unwrap_or(0.0) != 0.0,
+            _ => true,
+        };
         let off = !on;
+
+        use std::error::Error;
 
         let fr = FeatureResultBuilder::default()
             .value(value)
@@ -45,7 +49,7 @@ impl GrowthBook {
             .experiment(experiment)
             .experiment_result(experiment_result)
             .build()
-            .unwrap();
+            .unwrap_or(FeatureResult::default());
         fr
     }
 
@@ -61,11 +65,7 @@ impl GrowthBook {
             let n = util::hash(&filter.seed, hash_value, filter.hash_version);
 
             if let Some(n_value) = n {
-                if !filter
-                    .ranges
-                    .iter()
-                    .any(|filter_range| in_range(n_value, filter_range))
-                {
+                if !filter.ranges.iter().any(|filter_range| in_range(n_value, filter_range)) {
                     return true;
                 }
             }
@@ -130,36 +130,23 @@ impl GrowthBook {
             None => "id",
         };
         let empty_string_value: Value = Value::String(String::new());
-        let hash_value = self
-            .context
-            .attributes
-            .get(hash_attribute)
-            .unwrap_or(&empty_string_value);
+        let hash_value = self.context.attributes.get(hash_attribute).unwrap_or(&empty_string_value);
 
         let meta = experiment.meta.get(variation_index as usize);
         let experiment_result = ExperimentResultBuilder::default()
             .in_experiment(in_experiment)
             .variation_id(variation_index)
-            .value(
-                experiment
-                    .variations
-                    .get(variation_index as usize)
-                    .unwrap_or(&Value::Null)
-                    .clone(),
-            )
+            .value(experiment.variations.get(variation_index as usize).unwrap_or(&Value::Null).clone())
             .hash_used(hash_used.unwrap_or(false))
             .hash_attribute(hash_attribute.to_owned())
             .hash_value(hash_value.clone())
             .feature_id(feature_id.map(|f| f.to_owned()))
-            .key(
-                meta.and_then(|m| m.key.clone())
-                    .unwrap_or(variation_index.to_string()),
-            )
+            .key(meta.and_then(|m| m.key.clone()).unwrap_or(variation_index.to_string()))
             .bucket(bucket.unwrap_or(0.0))
             .name(meta.and_then(|m| m.name.clone()))
             .passthrough(meta.and_then(|m| m.passthrough).unwrap_or(false))
             .build()
-            .unwrap();
+            .unwrap_or(ExperimentResult::default());
         experiment_result
     }
 
@@ -167,7 +154,8 @@ impl GrowthBook {
         if !self.context.features.contains_key(key) {
             return self.get_feature_result(Value::Null, Source::UnknownFeature, None, None);
         }
-        let feature = self.context.features.get(key).unwrap();
+        let default_feature = Feature::default();
+        let feature = self.context.features.get(key).unwrap_or(&default_feature);
         for rule in feature.rules.iter() {
             if let Some(condition) = &rule.condition {
                 if !eval_condition(&self.context.attributes, condition) {
@@ -214,26 +202,16 @@ impl GrowthBook {
                 .hash_attribute(rule.hash_attribute.clone())
                 .hash_version(rule.hash_version.clone())
                 .build()
-                .unwrap();
+                .unwrap_or(Experiment::default());
             let result: ExperimentResult = self.run_internal(&experiment, Some(key));
 
             if !result.in_experiment || result.passthrough {
                 continue;
             }
 
-            return self.get_feature_result(
-                result.value.clone(),
-                EnumExperiment,
-                Some(experiment.clone()),
-                Some(result),
-            );
+            return self.get_feature_result(result.value.clone(), EnumExperiment, Some(experiment.clone()), Some(result));
         }
-        self.get_feature_result(
-            feature.default_value.clone().unwrap_or(Value::Null),
-            Source::DefaultValue,
-            None,
-            None,
-        )
+        self.get_feature_result(feature.default_value.clone().unwrap_or(Value::Null), Source::DefaultValue, None, None)
     }
     pub fn run(&self, experiment: &Experiment) -> ExperimentResult {
         self.run_internal(&experiment, None)
@@ -244,11 +222,7 @@ impl GrowthBook {
             return self.get_experiment_result(experiment, None, None, id.clone(), None);
         }
         if !self.context.url.is_empty() {
-            let qs_override = util::get_query_string_override(
-                &experiment.key,
-                &self.context.url,
-                experiment.variations.len() as i32,
-            );
+            let qs_override = util::get_query_string_override(&experiment.key, &self.context.url, experiment.variations.len() as i32);
             if let Some(qs) = qs_override {
                 return self.get_experiment_result(experiment, Some(qs), None, id.clone(), None);
             }
@@ -257,7 +231,7 @@ impl GrowthBook {
         if self.context.forced_variations.contains_key(&experiment.key) {
             return self.get_experiment_result(
                 experiment,
-                Some(*self.context.forced_variations.get(&experiment.key).unwrap()),
+                self.context.forced_variations.get(&experiment.key).cloned(),
                 None,
                 id.clone(),
                 None,
@@ -274,11 +248,7 @@ impl GrowthBook {
         };
 
         let empty_string_value: Value = Value::String(String::new());
-        let hash_value = self
-            .context
-            .attributes
-            .get(hash_attribute)
-            .unwrap_or(&empty_string_value);
+        let hash_value = self.context.attributes.get(hash_attribute).unwrap_or(&empty_string_value);
         let hash_value_string = hash_value
             .as_i64()
             .map(|primitive| primitive.to_string())
@@ -311,10 +281,7 @@ impl GrowthBook {
             ),
         };
         let n = util::hash(
-            &experiment
-                .seed
-                .clone()
-                .unwrap_or(experiment.key.clone().to_string()),
+            &experiment.seed.clone().unwrap_or(experiment.key.clone().to_string()),
             &hash_value_string,
             experiment.hash_version.clone().unwrap_or(1),
         );
@@ -324,21 +291,14 @@ impl GrowthBook {
             return self.get_experiment_result(experiment, None, None, id.clone(), None);
         }
         if let Some(_f) = experiment.force {
-            return self.get_experiment_result(
-                experiment,
-                experiment.force,
-                None,
-                id.clone(),
-                None,
-            );
+            return self.get_experiment_result(experiment, experiment.force, None, id.clone(), None);
         }
 
         if self.context.qa_mode {
             return self.get_experiment_result(experiment, None, None, id.clone(), None);
         }
 
-        let result =
-            self.get_experiment_result(experiment, Some(assigned), Some(true), id.clone(), n);
+        let result = self.get_experiment_result(experiment, Some(assigned), Some(true), id.clone(), n);
         if let Some(tc) = &self.tracking_callback {
             (tc.0)(experiment.clone(), result.clone());
         }
