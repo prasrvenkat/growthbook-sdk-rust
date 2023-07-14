@@ -16,17 +16,12 @@ mod json_tests {
     use serde_json::{from_str, Map, Value};
 
     use crate::growthbook::GrowthBook;
-    use crate::model::{
-        BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult,
-        Namespace, NamespaceBuilder,
-    };
+    use crate::model::{BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult, Namespace, NamespaceBuilder};
     use crate::{condition, growthbook, util};
 
     fn get_test_case_blob(key: &str) -> Option<Value> {
         let mut content = String::new();
-        if let Err(e) =
-            File::open("cases.json").and_then(|mut file| file.read_to_string(&mut content))
-        {
+        if let Err(e) = File::open("cases.json").and_then(|mut file| file.read_to_string(&mut content)) {
             eprintln!("failed to read test cases file: {}", e);
             return None;
         }
@@ -62,11 +57,7 @@ mod json_tests {
             let ranges: Vec<BucketRange> = serde_json::from_value(tc[2].clone()).unwrap();
             let expected: i32 = tc[3].as_i64().unwrap() as i32;
             let actual = util::choose_variation(n, ranges.as_ref());
-            assert_eq!(
-                actual, expected,
-                "choose_variation test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual, expected, "choose_variation test case '{}' failed", case_name);
         }
     }
 
@@ -84,12 +75,7 @@ mod json_tests {
             let key: &str = tc[2].as_str().unwrap();
             let expected: Option<&str> = tc[3].as_str();
             let actual = util::decrypt_string(ciphertext, key);
-            assert_eq!(
-                actual.as_deref(),
-                expected,
-                "decrypt test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual.as_deref(), expected, "decrypt test case '{}' failed", case_name);
         }
     }
 
@@ -106,19 +92,12 @@ mod json_tests {
             let input: &Vec<Value> = tc[1].as_array().unwrap();
             let n: i32 = input[0].as_i64().unwrap() as i32;
             let coverage: f32 = input[1].as_f64().unwrap() as f32;
-            let weights: Option<Vec<f32>> = input[2].as_array().map(|value| {
-                value
-                    .iter()
-                    .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-                    .collect()
-            });
+            let weights: Option<Vec<f32>> = input[2]
+                .as_array()
+                .map(|value| value.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect());
             let expected: Vec<BucketRange> = serde_json::from_value(tc[2].clone()).unwrap();
             let actual = util::get_bucket_ranges(n, coverage, weights);
-            assert_eq!(
-                actual, expected,
-                "bucket_range test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual, expected, "bucket_range test case '{}' failed", case_name);
         }
     }
 
@@ -134,11 +113,7 @@ mod json_tests {
             let n: i32 = tc[0].as_i64().unwrap() as i32;
             let expected: Vec<f32> = serde_json::from_value(tc[1].clone()).unwrap();
             let actual = util::get_equal_weights(n);
-            assert_eq!(
-                actual, expected,
-                "get_equal_weights test case '{}' failed",
-                i
-            );
+            assert_eq!(actual, expected, "get_equal_weights test case '{}' failed", i);
         }
     }
 
@@ -157,11 +132,7 @@ mod json_tests {
             let n: i32 = tc[3].as_i64().unwrap() as i32;
             let expected: Option<i32> = tc[4].as_i64().map(|v| v as i32);
             let actual = util::get_query_string_override(id, url, n);
-            assert_eq!(
-                actual, expected,
-                "get_query_string_override test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual, expected, "get_query_string_override test case '{}' failed", case_name);
         }
     }
 
@@ -203,11 +174,7 @@ mod json_tests {
                 .unwrap();
             let expected: bool = tc[3].as_bool().unwrap();
             let actual = util::in_namespace(user_id, &namespace);
-            assert_eq!(
-                actual, expected,
-                "in_namespace test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual, expected, "in_namespace test case '{}' failed", case_name);
         }
     }
 
@@ -225,11 +192,7 @@ mod json_tests {
             let attributes: &Value = &tc[2];
             let expected: bool = tc[3].as_bool().unwrap();
             let actual = condition::eval_condition(attributes, condition);
-            assert_eq!(
-                actual, expected,
-                "eval_condition test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual, expected, "eval_condition test case '{}' failed", case_name);
         }
     }
 
@@ -253,16 +216,8 @@ mod json_tests {
                 let attribute: &str = tc[0].as_str().unwrap();
                 let condition: &str = tc[1].as_str().unwrap();
                 let expected: bool = tc[2].as_bool().unwrap();
-                let actual = condition::eval_operator_condition(
-                    op,
-                    Some(&Value::from(attribute)),
-                    &Value::from(condition),
-                );
-                assert_eq!(
-                    actual, expected,
-                    "version_compare test case '{}', index '{}' failed",
-                    op, i
-                );
+                let actual = condition::eval_operator_condition(op, Some(&Value::from(attribute)), &Value::from(condition));
+                assert_eq!(actual, expected, "version_compare test case '{}', index '{}' failed", op, i);
             }
         }
     }
@@ -277,8 +232,7 @@ mod json_tests {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
             println!("case_name: {}", case_name);
-            let context: Context =
-                serde_json::from_value(tc[1].clone()).expect("failed to parse context");
+            let context: Context = serde_json::from_value(tc[1].clone()).expect("failed to parse context");
             let key: &str = &tc[2].as_str().unwrap();
             let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
             let gb = GrowthBook {
@@ -286,11 +240,7 @@ mod json_tests {
                 tracking_callback: None,
             };
             let actual = gb.eval_feature(key);
-            assert_eq!(
-                actual, expected,
-                "eval_feature test case '{}' failed",
-                case_name
-            );
+            assert_eq!(actual, expected, "eval_feature test case '{}' failed", case_name);
         }
     }
 
@@ -304,10 +254,8 @@ mod json_tests {
             let tc = tc.as_array().unwrap();
             let case_name: &str = tc[0].as_str().unwrap();
             println!("case_name: {}", case_name);
-            let context: Context =
-                serde_json::from_value(tc[1].clone()).expect("failed to parse context");
-            let experiment: Experiment =
-                serde_json::from_value(tc[2].clone()).expect("failed to parse experiment");
+            let context: Context = serde_json::from_value(tc[1].clone()).expect("failed to parse context");
+            let experiment: Experiment = serde_json::from_value(tc[2].clone()).expect("failed to parse experiment");
             let value: Value = tc[3].clone();
             let in_experiment: bool = tc[4].as_bool().expect("failed to parse in_experiment");
             let hash_used: bool = tc[5].as_bool().expect("failed to parse hash_used");
@@ -322,21 +270,13 @@ mod json_tests {
                 tracking_callback: None,
             };
             let actual = gb.run(&experiment);
-            assert_eq!(
-                actual.value, expected.value,
-                "run test case '{}' failed for value",
-                case_name
-            );
+            assert_eq!(actual.value, expected.value, "run test case '{}' failed for value", case_name);
             assert_eq!(
                 actual.in_experiment, expected.in_experiment,
                 "run test case '{}' failed for in_experiment",
                 case_name
             );
-            assert_eq!(
-                actual.hash_used, expected.hash_used,
-                "run test case '{}' failed for hash_used",
-                case_name
-            );
+            assert_eq!(actual.hash_used, expected.hash_used, "run test case '{}' failed for hash_used", case_name);
         }
     }
 }

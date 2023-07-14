@@ -11,9 +11,9 @@ const INIT32: u32 = 0x811c9dc5;
 const PRIME32: u32 = 0x01000193;
 
 fn fnv1a32(data: &str) -> u32 {
-    data.as_bytes().iter().fold(INIT32, |hash, &byte| {
-        (hash ^ (byte as u32)).wrapping_mul(PRIME32)
-    })
+    data.as_bytes()
+        .iter()
+        .fold(INIT32, |hash, &byte| (hash ^ (byte as u32)).wrapping_mul(PRIME32))
 }
 
 pub fn hash(seed: &str, value: &str, version: i32) -> Option<f32> {
@@ -47,16 +47,10 @@ pub fn get_equal_weights(num_variations: i32) -> Vec<f32> {
     }
 }
 
-pub fn get_bucket_ranges(
-    num_variations: i32,
-    coverage: f32,
-    weights: Option<Vec<f32>>,
-) -> Vec<BucketRange> {
+pub fn get_bucket_ranges(num_variations: i32, coverage: f32, weights: Option<Vec<f32>>) -> Vec<BucketRange> {
     let cov = coverage.clamp(0.0, 1.0);
     let equalized_weights = weights
-        .filter(|w| {
-            num_variations as usize == w.len() && (w.iter().sum::<f32>() - 1.0).abs() <= 0.01
-        })
+        .filter(|w| num_variations as usize == w.len() && (w.iter().sum::<f32>() - 1.0).abs() <= 0.01)
         .unwrap_or_else(|| get_equal_weights(num_variations));
 
     let mut cumulative = 0.0;
@@ -69,18 +63,14 @@ pub fn get_bucket_ranges(
                 .range_start(start)
                 .range_end(start + cov * w)
                 .build()
-                .unwrap();
+                .unwrap_or(BucketRange::default());
             br
         })
         .collect()
 }
 
 pub fn choose_variation(n: f32, ranges: &[BucketRange]) -> i32 {
-    ranges
-        .iter()
-        .position(|range| in_range(n, range))
-        .map(|i| i as i32)
-        .unwrap_or(-1)
+    ranges.iter().position(|range| in_range(n, range)).map(|i| i as i32).unwrap_or(-1)
 }
 
 pub fn get_query_string_override(id: &str, url: &str, num_variations: i32) -> Option<i32> {
@@ -101,6 +91,7 @@ pub fn get_query_string_override(id: &str, url: &str, num_variations: i32) -> Op
 }
 
 pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<String> {
+    // TODO: may need verbose match() to print errors and return None?
     let split: Vec<&str> = encrypted_string.splitn(2, ".").collect();
     if split.len() != 2 {
         return None;
