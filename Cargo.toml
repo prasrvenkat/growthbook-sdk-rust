@@ -8,19 +8,17 @@ metadata = { description = "GrowthBook SDK for Rust", license = "MIT", rust-vers
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.164", features = ["derive"] }
-derive_builder = "0.12.0"
-serde_json = "1.0.96"
-url = "2.4.0"
-data-encoding = "2.4.0"
-aes = "0.8.2"
-cbc = "0.1.2"
-regex = "1.8.4"
-log = "0.4.19"
+serde = { version = "1.0.164", features = ["serde_derive"], default-features = false }
+derive_builder = { default-features = false, version = "0.12.0" }
+serde_json = { default-features = false, version = "1.0.96" }
+url = { version = "2.4.0" }
+data-encoding = { version = "2.4.0" }
+aes = { version = "0.8.2" }
+cbc = { version = "0.1.2" }
+regex = { default-features = false, version = "1.8.4" }
+log = { version = "0.4.19" }
 reqwest = { version = "0.11.18", default-features = false, features = ["default-tls", "json"] }
-chrono = "0.4.26"
+chrono = { features = ["clock"], default-features = false, version = "0.4.26" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.28.2", default-features = false, features = ["rt", "macros", "time"] }
-
-[dev-dependencies]

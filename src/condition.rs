@@ -267,12 +267,11 @@ pub(crate) fn eval_operator_condition(operator: &str, attribute_value: Option<&V
     }
 }
 
+#[cfg(test)]
 mod tests {
-    
-
-    
-
-    
+    use crate::condition::compare_values;
+    use crate::model::BucketRange;
+    use serde_json::json;
 
     #[test]
     fn test_compare_values_mismatched_types() {
