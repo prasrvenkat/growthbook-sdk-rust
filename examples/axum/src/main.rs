@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::SystemTime;
 
 use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
@@ -18,6 +17,7 @@ use growthbook_sdk_rust::repository::FeatureRepository;
 use growthbook_sdk_rust::repository::FeatureRepositoryBuilder;
 use serde_json::json;
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 struct AppState {
     growthbook_repository: Arc<Mutex<FeatureRepository>>,
@@ -30,13 +30,11 @@ async fn main() {
         println!("Refreshed features @ {:?}", Utc::now().to_rfc3339(),);
     }));
     let mut repo = FeatureRepositoryBuilder::default()
-        .client_key(Some(
-            "java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string(),
-        ))
+        .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
         .build()
         .unwrap();
     repo.add_refresh_callback(callback);
-    repo.get_features(false);
+    repo.get_features().await;
 
     // initialize our application state
     let state = Arc::new(Mutex::new(AppState {
@@ -53,13 +51,11 @@ async fn main() {
         .unwrap();
 }
 
-async fn root(State(state): State<Arc<Mutex<AppState>>>) -> (StatusCode, Json<Value>) {
-    let mut state = state.lock().unwrap();
-    let features = state
-        .growthbook_repository
-        .lock()
-        .unwrap()
-        .get_features(false);
+#[axum_macros::debug_handler]
+async fn root(State(state): State<Arc<Mutex<AppState>>>) -> Result<Json<Value>, StatusCode> {
+    let mut state = state.lock().await;
+    let mut repository = state.growthbook_repository.lock().await;
+    let features = repository.get_features().await;
     let user_attributes = json!({
         "id"                 :"user-employee-123456789",
         "loggedIn"            :true,
@@ -69,14 +65,12 @@ async fn root(State(state): State<Arc<Mutex<AppState>>>) -> (StatusCode, Json<Va
     });
 
     // This will get called when the font_colour experiment below is evaluated
-    let tracking_callback = TrackingCallback(Box::new(
-        move |experiment: Experiment, result: ExperimentResult| {
-            println!(
-                "Experiment Viewed: {:?} - Variation index: {:?} - Value: {:?}",
-                experiment.key, result.variation_id, result.value
-            )
-        },
-    ));
+    let tracking_callback = TrackingCallback(Box::new(move |experiment: Experiment, result: ExperimentResult| {
+        println!(
+            "Experiment Viewed: {:?} - Variation index: {:?} - Value: {:?}",
+            experiment.key, result.variation_id, result.value
+        )
+    }));
     let gb = GrowthBook {
         context: ContextBuilder::default()
             .attributes(user_attributes)
@@ -116,5 +110,5 @@ async fn root(State(state): State<Arc<Mutex<AppState>>>) -> (StatusCode, Json<Va
         "time": Utc::now().to_rfc3339(),
     });
 
-    (StatusCode::OK, Json(response))
+    Ok(Json(response))
 }

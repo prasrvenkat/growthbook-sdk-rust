@@ -13,9 +13,14 @@ derive_builder = "0.12.0"
 serde_json = "1.0.96"
 url = "2.4.0"
 data-encoding = "2.4.0"
-openssl = "0.10.54"
+aes = "0.8.2"
+cbc = "0.1.2"
 regex = "1.8.4"
 log = "0.4.19"
-reqwest = { version = "0.11.18", features = ["json", "blocking"] }
+reqwest = { version = "0.11.18", default-features = false, features = ["default-tls", "json"] }
+chrono = "0.4.26"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.28.2", default-features = false, features = ["rt", "macros", "time"] }
 
 [dev-dependencies]
