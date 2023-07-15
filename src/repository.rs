@@ -1,6 +1,6 @@
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::{Arc, LockResult, RwLock};
+use std::sync::{Arc, RwLock};
 
 use derive_builder::Builder;
 use log::{error, warn};
@@ -8,8 +8,7 @@ use reqwest::header::USER_AGENT;
 use reqwest::{Client, ClientBuilder};
 use serde_json::{json, Value};
 
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::task::spawn;
+
 
 use crate::growthbook::SDK_VERSION;
 use crate::model::FeatureMap;
@@ -98,7 +97,7 @@ impl FeatureRepository {
         }
     }
 
-    async fn load_features(&mut self, timeout_seconds: u64) {
+    async fn load_features(&mut self, _timeout_seconds: u64) {
         let mut refreshed = false;
         if let Some(key) = &self.client_key {
             let url = format!("{}/api/features/{}", self.api_host, key);

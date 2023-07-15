@@ -1,15 +1,10 @@
-use std::time::Duration;
-
-use derive_builder::Builder;
-use log::error;
-use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
 use crate::model::{
-    BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder, Feature, FeatureMap, FeatureResult,
-    FeatureResultBuilder, Filter, Source, TrackingCallback,
+    BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder, Feature, FeatureResult, FeatureResultBuilder,
+    Filter, Source, TrackingCallback,
 };
 use crate::util;
 use crate::util::{choose_variation, in_range};
@@ -38,8 +33,6 @@ impl GrowthBook {
             _ => true,
         };
         let off = !on;
-
-        use std::error::Error;
 
         let fr = FeatureResultBuilder::default()
             .value(value)
