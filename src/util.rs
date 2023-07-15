@@ -94,7 +94,7 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
 pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<String> {
     // TODO: may need verbose match() to print errors and return None?
-    let split: Vec<&str> = encrypted_string.splitn(2, ".").collect();
+    let split: Vec<&str> = encrypted_string.splitn(2, '.').collect();
     if split.len() != 2 {
         return None;
     }
@@ -111,7 +111,7 @@ pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<St
         .decrypt_padded_mut::<Pkcs7>(&mut encrypted_data)
         .ok()?;
 
-    let decrypted_str = String::from_utf8_lossy(&decrypted).to_string();
+    let decrypted_str = String::from_utf8_lossy(decrypted).to_string();
     if decrypted_str.is_empty() {
         return None;
     }

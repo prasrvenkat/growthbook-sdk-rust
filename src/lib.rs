@@ -17,7 +17,7 @@ mod json_tests {
 
     use crate::growthbook::GrowthBook;
     use crate::model::{BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult, Namespace, NamespaceBuilder};
-    use crate::{condition, growthbook, util};
+    use crate::{condition, util};
 
     fn get_test_case_blob(key: &str) -> Option<Value> {
         let mut content = String::new();
@@ -233,7 +233,7 @@ mod json_tests {
             let case_name: &str = tc[0].as_str().unwrap();
             println!("case_name: {}", case_name);
             let context: Context = serde_json::from_value(tc[1].clone()).expect("failed to parse context");
-            let key: &str = &tc[2].as_str().unwrap();
+            let key: &str = tc[2].as_str().unwrap();
             let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
             let gb = GrowthBook {
                 context,
