@@ -1,12 +1,15 @@
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::{Arc, LockResult, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use derive_builder::Builder;
 use log::{error, warn};
-use reqwest::blocking::Client;
+use reqwest::header::USER_AGENT;
+use reqwest::{Client, ClientBuilder};
 use serde_json::{json, Value};
+
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::task::spawn;
 
 use crate::growthbook::SDK_VERSION;
 use crate::model::FeatureMap;
@@ -28,10 +31,10 @@ pub struct FeatureRepository {
     pub client_key: Option<String>,
     pub decryption_key: Option<String>,
     #[builder(default = "60")]
-    pub ttl_seconds: u64,
+    pub ttl_seconds: i64,
     #[builder(default = "10")]
     pub timeout: u64,
-    pub refreshed_at: Arc<RwLock<u64>>,
+    pub refreshed_at: Arc<RwLock<i64>>,
     pub refresh_callbacks: Arc<RwLock<Vec<FeatureRefreshCallback>>>,
     pub features: Arc<RwLock<FeatureMap>>,
 }
@@ -41,14 +44,7 @@ impl FeatureRepository {
         match self.refreshed_at.read() {
             Ok(refreshed_at) => {
                 let expiration_time = *refreshed_at + self.ttl_seconds;
-
-                match SystemTime::now().duration_since(UNIX_EPOCH) {
-                    Ok(duration) => expiration_time < duration.as_secs(),
-                    Err(_) => {
-                        error!("Error getting current time");
-                        false
-                    }
-                }
+                chrono::Utc::now().timestamp() > expiration_time
             }
             Err(_) => {
                 error!("Error getting last refresh time");
@@ -70,14 +66,13 @@ impl FeatureRepository {
         }
     }
 
-    pub fn get_features(&mut self, wait: bool) -> FeatureMap {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn get_features(&mut self) -> FeatureMap {
         if self.is_cache_expired() {
             let mut self_clone = self.clone();
-            if wait {
-                self_clone.load_features(self_clone.timeout);
-            } else {
-                std::thread::spawn(move || self_clone.load_features(self_clone.timeout));
-            }
+            tokio::spawn(async move {
+                self_clone.load_features(self_clone.timeout).await;
+            });
         }
         match self.features.read() {
             Ok(features) => features.clone(),
@@ -88,20 +83,38 @@ impl FeatureRepository {
         }
     }
 
-    fn load_features(&mut self, timeout_seconds: u64) {
+    #[cfg(target_arch = "wasm32")]
+    pub async fn get_features(&mut self) -> FeatureMap {
+        if self.is_cache_expired() {
+            let mut self_clone = self.clone();
+            self_clone.load_features(self_clone.timeout).await;
+        }
+        match self.features.read() {
+            Ok(features) => features.clone(),
+            Err(e) => {
+                error!("Error reading features: {}", e);
+                FeatureMap::default()
+            }
+        }
+    }
+
+    async fn load_features(&mut self, timeout_seconds: u64) {
         let mut refreshed = false;
         if let Some(key) = &self.client_key {
             let url = format!("{}/api/features/{}", self.api_host, key);
-            let client = Client::new();
+            let client = ClientBuilder::new().build().unwrap_or_else(|e| {
+                error!("Error creating HTTP client: {}", e);
+                Client::new()
+            });
 
             let res = match client
                 .get(url)
-                .header("User-Agent", format!("growthbook-sdk-rust/{}", SDK_VERSION))
-                .timeout(Duration::from_secs(timeout_seconds))
+                .header(USER_AGENT, format!("growthbook-sdk-rust/{}", SDK_VERSION))
                 .send()
+                .await
             {
-                Ok(res) => res.json().unwrap_or_else(|e| {
-                    error!("Error parsing response: {}", e);
+                Ok(res) => res.json().await.unwrap_or_else(|e| {
+                    error!("Error parsing features: {}", e);
                     json!({ "features": {} })
                 }),
                 Err(e) => {
@@ -170,14 +183,7 @@ impl FeatureRepository {
             }
 
             match self.refreshed_at.write() {
-                Ok(mut refreshed_at) => match SystemTime::now().duration_since(UNIX_EPOCH) {
-                    Ok(duration) => {
-                        *refreshed_at = duration.as_secs();
-                    }
-                    Err(_) => {
-                        error!("Error getting current time")
-                    }
-                },
+                Ok(mut refreshed_at) => *refreshed_at = chrono::Utc::now().timestamp(),
                 Err(_) => {
                     error!("Error setting last refresh time")
                 }
@@ -188,35 +194,56 @@ impl FeatureRepository {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+    use tokio::time::sleep;
+
     use super::*;
 
-    #[test]
-    fn test_load_features_normal() {
-        // TODO: hack - currently using the key from java example
+    #[tokio::test]
+    async fn test_load_features_normal() {
+        // TODO: hack - currently using the key from java examples
         let mut gb = FeatureRepositoryBuilder::default()
             .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
             .build()
             .expect("unable to build gb");
         assert_eq!(gb.features.read().unwrap().len(), 0);
-        gb.get_features(true);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
         assert_eq!(gb.features.read().unwrap().len(), 5);
     }
 
-    #[test]
-    fn test_load_features_encrypted() {
-        // TODO: hack - currently using the key from java example
+    async fn wait_for_refresh(gb: &mut FeatureRepository) {
+        let mut timeout = 1000;
+        loop {
+            if *gb.refreshed_at.read().unwrap() > 0 {
+                break;
+            }
+            if timeout > 0 {
+                sleep(Duration::from_millis(10)).await;
+                timeout -= 10;
+            } else {
+                println!("timeout waiting for refresh");
+                break;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_features_encrypted() {
+        // TODO: hack - currently using the key from java examples
         let mut gb = FeatureRepositoryBuilder::default()
             .client_key(Some("sdk-862b5mHcP9XPugqD".to_string()))
             .decryption_key(Some("BhB1wORFmZLTDjbvstvS8w==".to_string()))
             .build()
             .expect("unable to build gb");
         assert_eq!(gb.features.read().unwrap().len(), 0);
-        gb.get_features(true);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
         assert_eq!(gb.features.read().unwrap().len(), 1);
     }
 
-    #[test]
-    fn test_single_callback() {
+    #[tokio::test]
+    async fn test_single_callback() {
         static mut COUNT: u32 = 0;
         // unsafe is fine here, just for testing
         let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
@@ -228,12 +255,13 @@ mod tests {
             .build()
             .expect("unable to build gb");
         gb.add_refresh_callback(callback);
-        gb.get_features(true);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
         assert_eq!(unsafe { COUNT }, 1);
     }
 
-    #[test]
-    fn test_multiple_callback() {
+    #[tokio::test]
+    async fn test_multiple_callback() {
         static mut COUNT: u32 = 0;
         // TODO: unsafe is fine here, just for testing. Still better way?
         let callback_one: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
@@ -251,12 +279,13 @@ mod tests {
             .expect("unable to build gb");
         gb.add_refresh_callback(callback_one);
         gb.add_refresh_callback(callback_two);
-        gb.get_features(true);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
         assert_eq!(unsafe { COUNT }, 2);
     }
 
-    #[test]
-    fn test_clear_callback() {
+    #[tokio::test]
+    async fn test_clear_callback() {
         static mut COUNT: u32 = 0;
         // TODO: unsafe is fine here, just for testing. Still better way?
         let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
@@ -269,7 +298,8 @@ mod tests {
             .build()
             .expect("unable to build gb");
         gb.add_refresh_callback(callback);
-        gb.get_features(true);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
         assert_eq!(unsafe { COUNT }, 1);
 
         unsafe {
@@ -277,7 +307,8 @@ mod tests {
         }
         *gb.refreshed_at.write().unwrap() = 0;
         gb.clear_refresh_callbacks();
-        gb.get_features(true);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
         assert_eq!(unsafe { COUNT }, 0);
     }
 }

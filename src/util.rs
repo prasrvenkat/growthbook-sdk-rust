@@ -1,8 +1,8 @@
 use std::convert::TryInto;
 use std::str;
 
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use data_encoding::BASE64;
-use openssl::symm::{decrypt, Cipher};
 use url::Url;
 
 use crate::model::{BucketRange, BucketRangeBuilder, Namespace};
@@ -90,6 +90,8 @@ pub fn get_query_string_override(id: &str, url: &str, num_variations: i32) -> Op
     None
 }
 
+type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+
 pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<String> {
     // TODO: may need verbose match() to print errors and return None?
     let split: Vec<&str> = encrypted_string.splitn(2, ".").collect();
@@ -98,14 +100,16 @@ pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<St
     }
 
     let iv = BASE64.decode(split[0].as_bytes()).ok()?;
-    let encrypted_data = BASE64.decode(split[1].as_bytes()).ok()?;
+    let mut encrypted_data = BASE64.decode(split[1].as_bytes()).ok()?;
     let key = BASE64.decode(decryption_key.as_bytes()).ok()?;
 
-    let cipher = Cipher::aes_128_cbc();
     let iv_bytes: &[u8; 16] = iv.as_slice().try_into().ok()?;
     let key_bytes: &[u8; 16] = key.as_slice().try_into().ok()?;
 
-    let decrypted = decrypt(cipher, key_bytes, Some(iv_bytes), &encrypted_data).ok()?;
+    let decrypted = Aes128CbcDec::new_from_slices(key_bytes, iv_bytes)
+        .ok()?
+        .decrypt_padded_mut::<Pkcs7>(&mut encrypted_data)
+        .ok()?;
 
     let decrypted_str = String::from_utf8_lossy(&decrypted).to_string();
     if decrypted_str.is_empty() {
