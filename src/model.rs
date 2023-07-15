@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
 
-use derive_builder::Builder;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -19,8 +18,7 @@ impl Debug for TrackingCallback {
     }
 }
 
-#[derive(Builder, Debug, Clone, Default)]
-#[builder(default)]
+#[derive(Debug, Clone, Default)]
 pub struct BucketRange {
     pub range_start: f32,
     pub range_end: f32,
@@ -54,8 +52,7 @@ impl PartialEq for BucketRange {
     }
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct VariationMeta {
     pub key: Option<String>,
@@ -63,8 +60,7 @@ pub struct VariationMeta {
     pub passthrough: Option<bool>,
 }
 
-#[derive(Builder, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Namespace {
     pub id: String,
     pub range_start: f32,
@@ -92,18 +88,26 @@ impl<'de> Deserialize<'de> for Namespace {
     }
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Filter {
     pub seed: String,
     pub ranges: Vec<BucketRange>,
     #[serde(default = "filter_hash_version")]
-    #[builder(default = "2")]
     pub hash_version: i32,
     #[serde(default = "filter_attribute")]
-    #[builder(default = "filter_attribute()")]
     pub attribute: String,
+}
+
+impl Default for Filter {
+    fn default() -> Self {
+        Filter {
+            seed: Default::default(),
+            ranges: Default::default(),
+            hash_version: filter_hash_version(),
+            attribute: filter_attribute(),
+        }
+    }
 }
 
 const fn filter_hash_version() -> i32 {
@@ -114,8 +118,7 @@ fn filter_attribute() -> String {
     "id".to_string()
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Experiment {
     pub key: String,
@@ -136,8 +139,7 @@ pub struct Experiment {
     pub phase: Option<String>,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ExperimentResult {
     pub in_experiment: bool,
@@ -153,16 +155,14 @@ pub struct ExperimentResult {
     pub passthrough: bool,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TrackData {
     pub experiment: Experiment,
     pub result: ExperimentResult,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct FeatureRule {
     pub condition: Option<Condition>,
@@ -197,8 +197,7 @@ pub enum Source {
     Experiment,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct FeatureResult {
     pub value: Value,
@@ -209,20 +208,17 @@ pub struct FeatureResult {
     pub experiment_result: Option<ExperimentResult>,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Feature {
     pub default_value: Option<Value>,
     pub rules: Vec<FeatureRule>,
 }
 
-#[derive(Builder, Serialize, Deserialize, Debug, Default)]
-#[builder(default)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Context {
     #[serde(default = "context_enabled")]
-    #[builder(default = "true")]
     pub enabled: bool,
     pub api_host: Option<String>,
     pub client_key: Option<String>,
@@ -232,6 +228,22 @@ pub struct Context {
     pub features: FeatureMap,
     pub forced_variations: ForcedVariationsMap,
     pub qa_mode: bool,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Context {
+            enabled: context_enabled(),
+            api_host: Default::default(),
+            client_key: Default::default(),
+            decryption_key: Default::default(),
+            attributes: Default::default(),
+            url: Default::default(),
+            features: Default::default(),
+            forced_variations: Default::default(),
+            qa_mode: Default::default(),
+        }
+    }
 }
 
 const fn context_enabled() -> bool {

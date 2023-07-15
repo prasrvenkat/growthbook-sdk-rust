@@ -270,13 +270,14 @@ mod tests {
     use crate::condition::compare_values;
     use crate::model::BucketRange;
     use serde_json::json;
+    use std::f32::consts::PI;
 
     #[test]
     fn test_compare_values_mismatched_types() {
         assert!(!compare_values(Some(&json!(45)), &json!("something"), "=="));
         assert!(!compare_values(Some(&json!(45.67)), &json!(true), "!="));
         assert!(!compare_values(Some(&json!(BucketRange::default())), &json!("something"), ">"));
-        assert!(!compare_values(Some(&json!("other thing")), &json!(3.1415f32), "<"));
+        assert!(!compare_values(Some(&json!("other thing")), &json!(PI), "<"));
     }
 
     #[test]

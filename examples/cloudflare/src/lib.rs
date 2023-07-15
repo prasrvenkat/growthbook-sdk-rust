@@ -1,12 +1,10 @@
 use chrono::Utc;
 use growthbook_sdk_rust::growthbook::GrowthBook;
-use growthbook_sdk_rust::model::ContextBuilder;
+use growthbook_sdk_rust::model::Context;
 use growthbook_sdk_rust::model::Experiment;
-use growthbook_sdk_rust::model::ExperimentBuilder;
 use growthbook_sdk_rust::model::ExperimentResult;
 use growthbook_sdk_rust::model::TrackingCallback;
-use growthbook_sdk_rust::repository::FeatureRefreshCallback;
-use growthbook_sdk_rust::repository::FeatureRepositoryBuilder;
+use growthbook_sdk_rust::repository::FeatureRepository;
 use serde_json::json;
 use worker::*;
 
@@ -33,10 +31,10 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     router
         .get("/", |_, _| Response::ok("Hello from Growthbook!"))
         .get_async("/features", |_, _ctx| async move {
-            let mut repo = FeatureRepositoryBuilder::default()
-                .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
-                .build()
-                .unwrap();
+            let mut repo = FeatureRepository {
+                client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+                ..Default::default()
+            };
             let features = repo.get_features().await;
 
             let user_attributes = json!({
@@ -55,11 +53,11 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                 )
             }));
             let gb = GrowthBook {
-                context: ContextBuilder::default()
-                    .attributes(user_attributes)
-                    .features(features.clone())
-                    .build()
-                    .unwrap(),
+                context: Context {
+                    attributes: user_attributes,
+                    features: features.clone(),
+                    ..Default::default()
+                },
                 tracking_callback: Some(tracking_callback),
             };
             let banner_text = gb.get_feature_value_as_str("banner_text", "???");
@@ -70,19 +68,18 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             });
             let meal_type = gb.get_feature_value("meal_overrides_gluten_free", &default_meal_type);
 
-            let experiment = ExperimentBuilder::default()
-                .key("font_colour".to_string())
-                .variations(vec![
+            let experiment = Experiment {
+                key: "font_colour".to_string(),
+                variations: vec![
                     json!("red"),
                     json!("orange"),
                     json!("yellow"),
                     json!("green"),
                     json!("blue"),
                     json!("purple"),
-                ])
-                .build()
-                .unwrap();
-
+                ],
+                ..Default::default()
+            };
             let result = gb.run(&experiment);
             let username_colour = result.value.as_str().unwrap();
             let response = json!({
@@ -93,7 +90,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                 "time": Utc::now().to_rfc3339(),
             });
 
-            return Response::from_json(&response);
+            Response::from_json(&response)
         })
         .run(req, env)
         .await

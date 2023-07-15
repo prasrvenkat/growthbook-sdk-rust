@@ -9,7 +9,6 @@ metadata = { description = "GrowthBook SDK for Rust", license = "MIT", rust-vers
 
 [dependencies]
 serde = { version = "1.0.164", features = ["serde_derive"], default-features = false }
-derive_builder = { default-features = false, version = "0.12.0" }
 serde_json = { default-features = false, version = "1.0.96" }
 url = { version = "2.4.0" }
 data-encoding = { version = "2.4.0" }

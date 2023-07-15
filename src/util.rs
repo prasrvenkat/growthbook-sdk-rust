@@ -5,7 +5,7 @@ use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use data_encoding::BASE64;
 use url::Url;
 
-use crate::model::{BucketRange, BucketRangeBuilder, Namespace};
+use crate::model::{BucketRange, Namespace};
 
 const INIT32: u32 = 0x811c9dc5;
 const PRIME32: u32 = 0x01000193;
@@ -59,12 +59,10 @@ pub fn get_bucket_ranges(num_variations: i32, coverage: f32, weights: Option<Vec
         .map(|w| {
             let start = cumulative;
             cumulative += w;
-            let br = BucketRangeBuilder::default()
-                .range_start(start)
-                .range_end(start + cov * w)
-                .build()
-                .unwrap_or(BucketRange::default());
-            br
+            BucketRange {
+                range_start: start,
+                range_end: start + cov * w,
+            }
         })
         .collect()
 }

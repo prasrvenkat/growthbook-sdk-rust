@@ -2,10 +2,7 @@ use serde_json::Value;
 
 use crate::condition::eval_condition;
 use crate::model::Source::Experiment as EnumExperiment;
-use crate::model::{
-    BucketRange, Context, Experiment, ExperimentBuilder, ExperimentResult, ExperimentResultBuilder, Feature, FeatureResult, FeatureResultBuilder,
-    Filter, Source, TrackingCallback,
-};
+use crate::model::{BucketRange, Context, Experiment, ExperimentResult, Feature, FeatureResult, Filter, Source, TrackingCallback};
 use crate::util;
 use crate::util::{choose_variation, in_range};
 
@@ -34,16 +31,14 @@ impl GrowthBook {
         };
         let off = !on;
 
-        let fr = FeatureResultBuilder::default()
-            .value(value)
-            .on(on)
-            .off(off)
-            .source(source)
-            .experiment(experiment)
-            .experiment_result(experiment_result)
-            .build()
-            .unwrap_or(FeatureResult::default());
-        fr
+        FeatureResult {
+            value: value.clone(),
+            on,
+            off,
+            source: source.clone(),
+            experiment: experiment.clone(),
+            experiment_result: experiment_result.clone(),
+        }
     }
 
     fn is_filtered_out(&self, filters: &Vec<Filter>) -> bool {
@@ -126,21 +121,19 @@ impl GrowthBook {
         let hash_value = self.context.attributes.get(hash_attribute).unwrap_or(&empty_string_value);
 
         let meta = experiment.meta.get(variation_index as usize);
-        let experiment_result = ExperimentResultBuilder::default()
-            .in_experiment(in_experiment)
-            .variation_id(variation_index)
-            .value(experiment.variations.get(variation_index as usize).unwrap_or(&Value::Null).clone())
-            .hash_used(hash_used.unwrap_or(false))
-            .hash_attribute(hash_attribute.to_owned())
-            .hash_value(hash_value.clone())
-            .feature_id(feature_id.map(|f| f.to_owned()))
-            .key(meta.and_then(|m| m.key.clone()).unwrap_or(variation_index.to_string()))
-            .bucket(bucket.unwrap_or(0.0))
-            .name(meta.and_then(|m| m.name.clone()))
-            .passthrough(meta.and_then(|m| m.passthrough).unwrap_or(false))
-            .build()
-            .unwrap_or(ExperimentResult::default());
-        experiment_result
+        ExperimentResult {
+            in_experiment,
+            variation_id: variation_index,
+            value: experiment.variations.get(variation_index as usize).unwrap_or(&Value::Null).clone(),
+            hash_used: hash_used.unwrap_or(false),
+            hash_attribute: hash_attribute.to_owned(),
+            hash_value: hash_value.clone(),
+            feature_id: feature_id.map(|f| f.to_owned()),
+            key: meta.and_then(|m| m.key.clone()).unwrap_or(variation_index.to_string()),
+            bucket: bucket.unwrap_or(0.0),
+            name: meta.and_then(|m| m.name.clone()),
+            passthrough: meta.and_then(|m| m.passthrough).unwrap_or(false),
+        }
     }
 
     pub fn eval_feature(&self, key: &str) -> FeatureResult {
@@ -180,22 +173,22 @@ impl GrowthBook {
                 return self.get_feature_result(force.clone(), Source::Force, None, None);
             }
 
-            let experiment = ExperimentBuilder::default()
-                .key(rule.key.clone().unwrap_or(key.to_string()))
-                .variations(rule.variations.clone())
-                .weights(rule.weights.clone())
-                .coverage(rule.coverage)
-                .ranges(rule.ranges.clone())
-                .namespace(rule.namespace.clone())
-                .meta(rule.meta.clone())
-                .filters(rule.filters.clone())
-                .seed(rule.seed.clone())
-                .name(rule.name.clone())
-                .phase(rule.phase.clone())
-                .hash_attribute(rule.hash_attribute.clone())
-                .hash_version(rule.hash_version)
-                .build()
-                .unwrap_or(Experiment::default());
+            let experiment = Experiment {
+                key: rule.key.clone().unwrap_or(key.to_string()),
+                variations: rule.variations.clone(),
+                weights: rule.weights.clone(),
+                coverage: rule.coverage,
+                ranges: rule.ranges.clone(),
+                namespace: rule.namespace.clone(),
+                meta: rule.meta.clone(),
+                filters: rule.filters.clone(),
+                seed: rule.seed.clone(),
+                name: rule.name.clone(),
+                phase: rule.phase.clone(),
+                hash_attribute: rule.hash_attribute.clone(),
+                hash_version: rule.hash_version,
+                ..Experiment::default()
+            };
             let result: ExperimentResult = self.run_internal(&experiment, Some(key));
 
             if !result.in_experiment || result.passthrough {
