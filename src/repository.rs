@@ -1,15 +1,11 @@
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::{Arc, LockResult, RwLock};
+use std::sync::{Arc, RwLock};
 
-use derive_builder::Builder;
 use log::{error, warn};
 use reqwest::header::USER_AGENT;
 use reqwest::{Client, ClientBuilder};
 use serde_json::{json, Value};
-
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::task::spawn;
 
 use crate::growthbook::SDK_VERSION;
 use crate::model::FeatureMap;
@@ -23,20 +19,31 @@ impl Debug for FeatureRefreshCallback {
     }
 }
 
-#[derive(Builder, Debug, Clone, Default)]
-#[builder(default)]
+#[derive(Debug, Clone)]
 pub struct FeatureRepository {
-    #[builder(default = "\"https://cdn.growthbook.io\".to_string()")]
     pub api_host: String,
     pub client_key: Option<String>,
     pub decryption_key: Option<String>,
-    #[builder(default = "60")]
     pub ttl_seconds: i64,
-    #[builder(default = "10")]
     pub timeout: u64,
     pub refreshed_at: Arc<RwLock<i64>>,
     pub refresh_callbacks: Arc<RwLock<Vec<FeatureRefreshCallback>>>,
     pub features: Arc<RwLock<FeatureMap>>,
+}
+
+impl Default for FeatureRepository {
+    fn default() -> Self {
+        FeatureRepository {
+            api_host: "https://cdn.growthbook.io".to_string(),
+            client_key: None,
+            decryption_key: None,
+            ttl_seconds: 60,
+            timeout: 10,
+            refreshed_at: Arc::new(RwLock::new(0)),
+            refresh_callbacks: Arc::new(RwLock::new(vec![])),
+            features: Arc::new(RwLock::new(FeatureMap::default())),
+        }
+    }
 }
 
 impl FeatureRepository {
@@ -98,7 +105,7 @@ impl FeatureRepository {
         }
     }
 
-    async fn load_features(&mut self, timeout_seconds: u64) {
+    async fn load_features(&mut self, _timeout_seconds: u64) {
         let mut refreshed = false;
         if let Some(key) = &self.client_key {
             let url = format!("{}/api/features/{}", self.api_host, key);
@@ -195,6 +202,7 @@ impl FeatureRepository {
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
+
     use tokio::time::sleep;
 
     use super::*;
@@ -202,10 +210,10 @@ mod tests {
     #[tokio::test]
     async fn test_load_features_normal() {
         // TODO: hack - currently using the key from java examples
-        let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
-            .build()
-            .expect("unable to build gb");
+        let mut gb = FeatureRepository {
+            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            ..Default::default()
+        };
         assert_eq!(gb.features.read().unwrap().len(), 0);
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;
@@ -231,11 +239,11 @@ mod tests {
     #[tokio::test]
     async fn test_load_features_encrypted() {
         // TODO: hack - currently using the key from java examples
-        let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some("sdk-862b5mHcP9XPugqD".to_string()))
-            .decryption_key(Some("BhB1wORFmZLTDjbvstvS8w==".to_string()))
-            .build()
-            .expect("unable to build gb");
+        let mut gb = FeatureRepository {
+            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
+            ..Default::default()
+        };
         assert_eq!(gb.features.read().unwrap().len(), 0);
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;
@@ -250,10 +258,10 @@ mod tests {
             assert_eq!(features.len(), 5);
             COUNT += 1;
         }));
-        let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
-            .build()
-            .expect("unable to build gb");
+        let mut gb = FeatureRepository {
+            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            ..Default::default()
+        };
         gb.add_refresh_callback(callback);
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;
@@ -273,10 +281,10 @@ mod tests {
             COUNT += 1;
         }));
 
-        let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()))
-            .build()
-            .expect("unable to build gb");
+        let mut gb = FeatureRepository {
+            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            ..Default::default()
+        };
         gb.add_refresh_callback(callback_one);
         gb.add_refresh_callback(callback_two);
         gb.get_features().await;
@@ -292,11 +300,11 @@ mod tests {
             assert_eq!(features.len(), 1);
             COUNT += 1;
         }));
-        let mut gb = FeatureRepositoryBuilder::default()
-            .client_key(Some("sdk-862b5mHcP9XPugqD".to_string()))
-            .decryption_key(Some("BhB1wORFmZLTDjbvstvS8w==".to_string()))
-            .build()
-            .expect("unable to build gb");
+        let mut gb = FeatureRepository {
+            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
+            ..Default::default()
+        };
         gb.add_refresh_callback(callback);
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;

@@ -5,7 +5,7 @@ use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use data_encoding::BASE64;
 use url::Url;
 
-use crate::model::{BucketRange, BucketRangeBuilder, Namespace};
+use crate::model::{BucketRange, Namespace};
 
 const INIT32: u32 = 0x811c9dc5;
 const PRIME32: u32 = 0x01000193;
@@ -59,12 +59,10 @@ pub fn get_bucket_ranges(num_variations: i32, coverage: f32, weights: Option<Vec
         .map(|w| {
             let start = cumulative;
             cumulative += w;
-            let br = BucketRangeBuilder::default()
-                .range_start(start)
-                .range_end(start + cov * w)
-                .build()
-                .unwrap_or(BucketRange::default());
-            br
+            BucketRange {
+                range_start: start,
+                range_end: start + cov * w,
+            }
         })
         .collect()
 }
@@ -94,7 +92,7 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
 pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<String> {
     // TODO: may need verbose match() to print errors and return None?
-    let split: Vec<&str> = encrypted_string.splitn(2, ".").collect();
+    let split: Vec<&str> = encrypted_string.splitn(2, '.').collect();
     if split.len() != 2 {
         return None;
     }
@@ -111,7 +109,7 @@ pub fn decrypt_string(encrypted_string: &str, decryption_key: &str) -> Option<St
         .decrypt_padded_mut::<Pkcs7>(&mut encrypted_data)
         .ok()?;
 
-    let decrypted_str = String::from_utf8_lossy(&decrypted).to_string();
+    let decrypted_str = String::from_utf8_lossy(decrypted).to_string();
     if decrypted_str.is_empty() {
         return None;
     }

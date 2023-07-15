@@ -16,8 +16,8 @@ mod json_tests {
     use serde_json::{from_str, Map, Value};
 
     use crate::growthbook::GrowthBook;
-    use crate::model::{BucketRange, Context, Experiment, ExperimentResult, ExperimentResultBuilder, FeatureResult, Namespace, NamespaceBuilder};
-    use crate::{condition, growthbook, util};
+    use crate::model::{BucketRange, Context, Experiment, ExperimentResult, FeatureResult, Namespace};
+    use crate::{condition, util};
 
     fn get_test_case_blob(key: &str) -> Option<Value> {
         let mut content = String::new();
@@ -166,12 +166,11 @@ mod json_tests {
             println!("case_name: {}", case_name);
             let user_id: &str = tc[1].as_str().unwrap();
             let namespace_arr = tc[2].as_array().unwrap();
-            let namespace: Namespace = NamespaceBuilder::default()
-                .id(namespace_arr[0].as_str().unwrap().to_string())
-                .range_start(namespace_arr[1].as_f64().unwrap() as f32)
-                .range_end(namespace_arr[2].as_f64().unwrap() as f32)
-                .build()
-                .unwrap();
+            let namespace: Namespace = Namespace {
+                id: namespace_arr[0].as_str().unwrap().to_string(),
+                range_start: namespace_arr[1].as_f64().unwrap() as f32,
+                range_end: namespace_arr[2].as_f64().unwrap() as f32,
+            };
             let expected: bool = tc[3].as_bool().unwrap();
             let actual = util::in_namespace(user_id, &namespace);
             assert_eq!(actual, expected, "in_namespace test case '{}' failed", case_name);
@@ -233,7 +232,7 @@ mod json_tests {
             let case_name: &str = tc[0].as_str().unwrap();
             println!("case_name: {}", case_name);
             let context: Context = serde_json::from_value(tc[1].clone()).expect("failed to parse context");
-            let key: &str = &tc[2].as_str().unwrap();
+            let key: &str = tc[2].as_str().unwrap();
             let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
             let gb = GrowthBook {
                 context,
@@ -259,12 +258,12 @@ mod json_tests {
             let value: Value = tc[3].clone();
             let in_experiment: bool = tc[4].as_bool().expect("failed to parse in_experiment");
             let hash_used: bool = tc[5].as_bool().expect("failed to parse hash_used");
-            let expected: ExperimentResult = ExperimentResultBuilder::default()
-                .value(value)
-                .in_experiment(in_experiment)
-                .hash_used(hash_used)
-                .build()
-                .expect("failed to build experiment result");
+            let expected: ExperimentResult = ExperimentResult {
+                value,
+                in_experiment,
+                hash_used,
+                ..Default::default()
+            };
             let gb = GrowthBook {
                 context,
                 tracking_callback: None,

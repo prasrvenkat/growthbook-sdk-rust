@@ -20,3 +20,7 @@ Cargo.lock
 
 .idea
 .vscode
+
+# from cargo-unused-features
+report.html
+report.json
