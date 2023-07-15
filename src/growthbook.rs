@@ -222,13 +222,7 @@ impl GrowthBook {
         }
 
         if self.context.forced_variations.contains_key(&experiment.key) {
-            return self.get_experiment_result(
-                experiment,
-                self.context.forced_variations.get(&experiment.key).cloned(),
-                None,
-                id,
-                None,
-            );
+            return self.get_experiment_result(experiment, self.context.forced_variations.get(&experiment.key).cloned(), None, id, None);
         }
         if let Some(active) = experiment.active {
             if !active {

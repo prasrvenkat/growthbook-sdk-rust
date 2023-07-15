@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
 
-
 use derive_builder::Builder;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;

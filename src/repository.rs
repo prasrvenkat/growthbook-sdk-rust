@@ -8,8 +8,6 @@ use reqwest::header::USER_AGENT;
 use reqwest::{Client, ClientBuilder};
 use serde_json::{json, Value};
 
-
-
 use crate::growthbook::SDK_VERSION;
 use crate::model::FeatureMap;
 use crate::util;
