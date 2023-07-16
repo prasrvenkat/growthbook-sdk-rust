@@ -46,7 +46,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             });
 
             // This will get called when the font_colour experiment below is evaluated
-            let tracking_callback = TrackingCallback(Box::new(move |experiment: Experiment, result: ExperimentResult| {
+            let tracking_callback = TrackingCallback(Box::new(move |experiment: &Experiment, result: &ExperimentResult| {
                 println!(
                     "Experiment Viewed: {:?} - Variation index: {:?} - Value: {:?}",
                     experiment.key, result.variation_id, result.value
@@ -59,6 +59,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                     ..Default::default()
                 },
                 tracking_callback: Some(tracking_callback),
+                ..Default::default()
             };
             let banner_text = gb.get_feature_value_as_str("banner_text", "???");
             let use_dark_mode = gb.is_on("dark_mode");

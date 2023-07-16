@@ -236,7 +236,7 @@ mod json_tests {
             let expected: FeatureResult = serde_json::from_value(tc[3].clone()).unwrap();
             let gb = GrowthBook {
                 context,
-                tracking_callback: None,
+                ..Default::default()
             };
             let actual = gb.eval_feature(key);
             assert_eq!(actual, expected, "eval_feature test case '{}' failed", case_name);
@@ -266,7 +266,7 @@ mod json_tests {
             };
             let gb = GrowthBook {
                 context,
-                tracking_callback: None,
+                ..Default::default()
             };
             let actual = gb.run(&experiment);
             assert_eq!(actual.value, expected.value, "run test case '{}' failed for value", case_name);

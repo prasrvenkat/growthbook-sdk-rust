@@ -1,6 +1,4 @@
-
 use std::sync::Arc;
-
 
 use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
 use chrono::prelude::Utc;
@@ -8,7 +6,6 @@ use growthbook_sdk_rust::growthbook::GrowthBook;
 use growthbook_sdk_rust::model::Context;
 use growthbook_sdk_rust::model::Experiment;
 use growthbook_sdk_rust::model::ExperimentResult;
-
 use growthbook_sdk_rust::model::TrackingCallback;
 use growthbook_sdk_rust::repository::FeatureRefreshCallback;
 use growthbook_sdk_rust::repository::FeatureRepository;
@@ -62,7 +59,7 @@ async fn root(State(state): State<Arc<Mutex<AppState>>>) -> Result<Json<Value>, 
     });
 
     // This will get called when the font_colour experiment below is evaluated
-    let tracking_callback = TrackingCallback(Box::new(move |experiment: Experiment, result: ExperimentResult| {
+    let tracking_callback = TrackingCallback(Box::new(move |experiment: &Experiment, result: &ExperimentResult| {
         println!(
             "Experiment Viewed: {:?} - Variation index: {:?} - Value: {:?}",
             experiment.key, result.variation_id, result.value
@@ -75,6 +72,7 @@ async fn root(State(state): State<Arc<Mutex<AppState>>>) -> Result<Json<Value>, 
             ..Default::default()
         },
         tracking_callback: Some(tracking_callback),
+        ..Default::default()
     };
     let banner_text = gb.get_feature_value_as_str("banner_text", "???");
     let use_dark_mode = gb.is_on("dark_mode");

@@ -11,7 +11,7 @@ use crate::growthbook::SDK_VERSION;
 use crate::model::FeatureMap;
 use crate::util;
 
-pub struct FeatureRefreshCallback(pub Box<dyn Fn(FeatureMap) + Send + Sync>);
+pub struct FeatureRefreshCallback(pub Box<dyn Fn(&FeatureMap) + Send + Sync>);
 
 impl Debug for FeatureRefreshCallback {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -176,7 +176,7 @@ impl FeatureRepository {
                     for callback in callbacks.iter() {
                         match self.features.read() {
                             Ok(features) => {
-                                (callback.0)(features.clone());
+                                (callback.0)(&features);
                             }
                             Err(_) => {
                                 error!("Error reading features for refresh callbacks")

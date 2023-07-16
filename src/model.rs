@@ -10,7 +10,7 @@ pub type Condition = Value;
 pub type FeatureMap = HashMap<String, Feature>;
 pub type ForcedVariationsMap = HashMap<String, i32>;
 
-pub struct TrackingCallback(pub Box<dyn Fn(Experiment, ExperimentResult) + Send + Sync>);
+pub struct TrackingCallback(pub Box<dyn Fn(&Experiment, &ExperimentResult) + Send + Sync>);
 
 impl Debug for TrackingCallback {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -220,9 +220,11 @@ pub struct Feature {
 pub struct Context {
     #[serde(default = "context_enabled")]
     pub enabled: bool,
+    // TODO: do we need these? <start>
     pub api_host: Option<String>,
     pub client_key: Option<String>,
     pub decryption_key: Option<String>,
+    // TODO: do we need these? <end>
     pub attributes: Attributes,
     pub url: String,
     pub features: FeatureMap,
@@ -254,10 +256,9 @@ const fn context_enabled() -> bool {
 mod tests {
     use serde_json::{json, Value};
 
-    use crate::model::Source::Force;
     use crate::model::{
-        BucketRange, Condition, Context, Experiment, ExperimentResult, Feature, FeatureMap, FeatureResult, FeatureRule, Filter, ForcedVariationsMap,
-        Namespace, Source, TrackData, VariationMeta,
+        BucketRange, Context, Experiment, ExperimentResult, Feature, FeatureMap, FeatureResult, FeatureRule, Filter, ForcedVariationsMap, Namespace,
+        Source, TrackData, VariationMeta,
     };
 
     #[test]

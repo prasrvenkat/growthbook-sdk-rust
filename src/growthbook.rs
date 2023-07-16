@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use chrono::Local;
 use serde_json::Value;
 
 use crate::condition::eval_condition;
@@ -12,6 +15,17 @@ pub const SDK_VERSION: &str = "0.0.1";
 pub struct GrowthBook {
     pub context: Context,
     pub tracking_callback: Option<TrackingCallback>,
+    pub subscriptions: HashMap<i64, TrackingCallback>,
+}
+
+impl Default for GrowthBook {
+    fn default() -> Self {
+        GrowthBook {
+            context: Context::default(),
+            tracking_callback: None,
+            subscriptions: HashMap::new(),
+        }
+    }
 }
 
 impl GrowthBook {
@@ -39,6 +53,20 @@ impl GrowthBook {
             experiment: experiment.clone(),
             experiment_result: experiment_result.clone(),
         }
+    }
+
+    pub fn subscribe(&mut self, callback: TrackingCallback) -> i64 {
+        let subscription_id = Local::now().timestamp_nanos();
+        self.subscriptions.insert(subscription_id, callback);
+        subscription_id
+    }
+
+    pub fn unsubscribe(&mut self, subscription_id: i64) {
+        self.subscriptions.remove(&subscription_id);
+    }
+
+    pub fn clear_subscriptions(&mut self) {
+        self.subscriptions.clear();
     }
 
     fn is_filtered_out(&self, filters: &Vec<Filter>) -> bool {
@@ -167,7 +195,7 @@ impl GrowthBook {
                 }
                 for td in rule.tracks.iter() {
                     if let Some(tc) = &self.tracking_callback {
-                        (tc.0)(td.experiment.clone(), td.result.clone());
+                        (tc.0)(&td.experiment, &td.result);
                     }
                 }
                 return self.get_feature_result(force.clone(), Source::Force, None, None);
@@ -200,7 +228,11 @@ impl GrowthBook {
         self.get_feature_result(feature.default_value.clone().unwrap_or(Value::Null), Source::DefaultValue, None, None)
     }
     pub fn run(&self, experiment: &Experiment) -> ExperimentResult {
-        self.run_internal(experiment, None)
+        let result = self.run_internal(experiment, None);
+        self.subscriptions.iter().for_each(|(_k, v)| {
+            (v.0)(&experiment, &result);
+        });
+        result
     }
 
     fn run_internal(&self, experiment: &Experiment, id: Option<&str>) -> ExperimentResult {
@@ -280,7 +312,7 @@ impl GrowthBook {
 
         let result = self.get_experiment_result(experiment, Some(assigned), Some(true), id, n);
         if let Some(tc) = &self.tracking_callback {
-            (tc.0)(experiment.clone(), result.clone());
+            (tc.0)(&experiment, &result);
         }
         result
     }
@@ -325,5 +357,201 @@ impl GrowthBook {
             return fallback;
         }
         value.as_f64().unwrap_or(fallback)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::growthbook::GrowthBook;
+    use crate::model::{Context, Experiment, TrackingCallback};
+
+    #[test]
+    fn test_tracking_callback_called() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let callback: TrackingCallback = TrackingCallback(Box::new(move |experiment, experiment_result| unsafe {
+            assert_eq!(experiment.key, "my-test");
+            assert_eq!(experiment_result.in_experiment, true);
+            assert_eq!(experiment_result.hash_used, true);
+            assert_eq!(experiment_result.value, json!(1));
+
+            COUNT += 1;
+        }));
+
+        let gb = GrowthBook {
+            context: Context {
+                attributes: json!({ "id": "1" }),
+                ..Default::default()
+            },
+            tracking_callback: Some(callback),
+            ..Default::default()
+        };
+        assert_eq!(unsafe { COUNT }, 0);
+
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 1);
+    }
+
+    #[test]
+    fn test_tracking_callback_not_called() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let callback: TrackingCallback = TrackingCallback(Box::new(move |_experiment, _experiment_result| unsafe {
+            COUNT += 1;
+            assert!(false, "Callback should not be called");
+        }));
+        let gb = GrowthBook {
+            context: Context {
+                attributes: json!({ "id": "1" }),
+                ..Default::default()
+            },
+            tracking_callback: Some(callback),
+            ..Default::default()
+        };
+        assert_eq!(unsafe { COUNT }, 0);
+
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            coverage: Some(0.4),
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 0);
+    }
+
+    #[test]
+    fn test_subscriptions_called_in_experiment() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let subscription: TrackingCallback = TrackingCallback(Box::new(move |experiment, experiment_result| unsafe {
+            assert_eq!(experiment.key, "my-test");
+            assert_eq!(experiment_result.in_experiment, true);
+            assert_eq!(experiment_result.hash_used, true);
+            assert_eq!(experiment_result.value, json!(1));
+            COUNT += 1;
+        }));
+
+        let mut gb = GrowthBook {
+            context: Context {
+                attributes: json!({ "id": "1" }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        gb.subscribe(subscription);
+        assert_eq!(unsafe { COUNT }, 0);
+
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 1);
+    }
+
+    #[test]
+    fn test_subscriptions_called_not_in_experiment() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let subscription: TrackingCallback = TrackingCallback(Box::new(move |experiment, experiment_result| unsafe {
+            assert_eq!(experiment.key, "my-test");
+            assert_eq!(experiment_result.in_experiment, false);
+            assert_eq!(experiment_result.hash_used, false);
+            assert_eq!(experiment_result.value, json!(0));
+            COUNT += 1;
+        }));
+
+        let mut gb = GrowthBook {
+            context: Context {
+                attributes: json!({ "id": "1" }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(unsafe { COUNT }, 0);
+        gb.subscribe(subscription);
+
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            coverage: Some(0.4),
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 1);
+    }
+
+    #[test]
+    fn test_multiple_subscriptions() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let subscription_one: TrackingCallback = TrackingCallback(Box::new(move |_experiment, _experiment_result| unsafe {
+            COUNT += 1;
+        }));
+        let subscription_two: TrackingCallback = TrackingCallback(Box::new(move |_experiment, _experiment_result| unsafe {
+            COUNT += 1;
+        }));
+        let mut gb = GrowthBook {
+            context: Context {
+                attributes: json!({ "id": "1" }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(unsafe { COUNT }, 0);
+        gb.subscribe(subscription_one);
+        gb.subscribe(subscription_two);
+
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            coverage: Some(0.4),
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 2);
+    }
+
+    #[test]
+    fn test_multiple_subscriptions_with_one_unsubscribed() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let subscription_one: TrackingCallback = TrackingCallback(Box::new(move |_experiment, _experiment_result| unsafe {
+            COUNT += 1;
+        }));
+        let subscription_two: TrackingCallback = TrackingCallback(Box::new(move |_experiment, _experiment_result| unsafe {
+            COUNT += 1;
+        }));
+        let mut gb = GrowthBook {
+            context: Context {
+                attributes: json!({ "id": "1" }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(unsafe { COUNT }, 0);
+        let _subscription_one_id = gb.subscribe(subscription_one);
+        let subscription_two_id = gb.subscribe(subscription_two);
+
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            coverage: Some(0.4),
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 2);
+        gb.unsubscribe(subscription_two_id);
+        gb.run(&Experiment {
+            key: "my-test".to_string(),
+            variations: vec![json!(0), json!(1)],
+            coverage: Some(0.4),
+            ..Default::default()
+        });
+        assert_eq!(unsafe { COUNT }, 3);
     }
 }
