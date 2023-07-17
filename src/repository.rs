@@ -200,6 +200,7 @@ impl FeatureRepository {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use std::time::Duration;
 
@@ -317,6 +318,105 @@ mod tests {
         gb.clear_refresh_callbacks();
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;
+        assert_eq!(unsafe { COUNT }, 0);
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_arch = "wasm32")]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn test_load_features_normal() {
+        // TODO: hack - currently using the key from java examples
+        let mut gb = FeatureRepository {
+            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(gb.features.read().unwrap().len(), 0);
+        gb.get_features();
+        assert_eq!(gb.features.read().unwrap().len(), 5);
+    }
+
+    #[test]
+    fn test_load_features_encrypted() {
+        // TODO: hack - currently using the key from java examples
+        let mut gb = FeatureRepository {
+            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(gb.features.read().unwrap().len(), 0);
+        gb.get_features();
+        assert_eq!(gb.features.read().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_single_callback() {
+        static mut COUNT: u32 = 0;
+        // unsafe is fine here, just for testing
+        let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 5);
+            COUNT += 1;
+        }));
+        let mut gb = FeatureRepository {
+            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            ..Default::default()
+        };
+        gb.add_refresh_callback(callback);
+        gb.get_features();
+        assert_eq!(unsafe { COUNT }, 1);
+    }
+
+    #[test]
+    fn test_multiple_callback() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let callback_one: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 5);
+            COUNT += 1;
+        }));
+        let callback_two: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 5);
+            COUNT += 1;
+        }));
+
+        let mut gb = FeatureRepository {
+            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            ..Default::default()
+        };
+        gb.add_refresh_callback(callback_one);
+        gb.add_refresh_callback(callback_two);
+        gb.get_features();
+        assert_eq!(unsafe { COUNT }, 2);
+    }
+
+    #[test]
+    fn test_clear_callback() {
+        static mut COUNT: u32 = 0;
+        // TODO: unsafe is fine here, just for testing. Still better way?
+        let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
+            assert_eq!(features.len(), 1);
+            COUNT += 1;
+        }));
+        let mut gb = FeatureRepository {
+            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
+            ..Default::default()
+        };
+        gb.add_refresh_callback(callback);
+        gb.get_features();
+        assert_eq!(unsafe { COUNT }, 1);
+
+        unsafe {
+            COUNT = 0;
+        }
+        *gb.refreshed_at.write().unwrap() = 0;
+        gb.clear_refresh_callbacks();
+        gb.get_features();
         assert_eq!(unsafe { COUNT }, 0);
     }
 }
