@@ -22,6 +22,16 @@ jobs:
           target: ${{ matrix.target }}
           override: true
           components: rustfmt, clippy
+      - name: Format Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --check --verbose
+      - name: Clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --verbose -- -D warnings        
       - name: Build
         uses: actions-rs/cargo@v1
         with:
