@@ -12,20 +12,11 @@ use crate::util::{choose_variation, in_range};
 // should match cargo.toml
 pub const SDK_VERSION: &str = "0.0.1";
 
+#[derive(Default)]
 pub struct GrowthBook {
     pub context: Context,
     pub tracking_callback: Option<TrackingCallback>,
     pub subscriptions: HashMap<i64, TrackingCallback>,
-}
-
-impl Default for GrowthBook {
-    fn default() -> Self {
-        GrowthBook {
-            context: Context::default(),
-            tracking_callback: None,
-            subscriptions: HashMap::new(),
-        }
-    }
 }
 
 impl GrowthBook {
@@ -230,7 +221,7 @@ impl GrowthBook {
     pub fn run(&self, experiment: &Experiment) -> ExperimentResult {
         let result = self.run_internal(experiment, None);
         self.subscriptions.iter().for_each(|(_k, v)| {
-            (v.0)(&experiment, &result);
+            (v.0)(experiment, &result);
         });
         result
     }
@@ -312,7 +303,7 @@ impl GrowthBook {
 
         let result = self.get_experiment_result(experiment, Some(assigned), Some(true), id, n);
         if let Some(tc) = &self.tracking_callback {
-            (tc.0)(&experiment, &result);
+            (tc.0)(experiment, &result);
         }
         result
     }
@@ -373,8 +364,8 @@ mod tests {
         // TODO: unsafe is fine here, just for testing. Still better way?
         let callback: TrackingCallback = TrackingCallback(Box::new(move |experiment, experiment_result| unsafe {
             assert_eq!(experiment.key, "my-test");
-            assert_eq!(experiment_result.in_experiment, true);
-            assert_eq!(experiment_result.hash_used, true);
+            assert!(experiment_result.in_experiment);
+            assert!(experiment_result.hash_used);
             assert_eq!(experiment_result.value, json!(1));
 
             COUNT += 1;
@@ -404,7 +395,7 @@ mod tests {
         // TODO: unsafe is fine here, just for testing. Still better way?
         let callback: TrackingCallback = TrackingCallback(Box::new(move |_experiment, _experiment_result| unsafe {
             COUNT += 1;
-            assert!(false, "Callback should not be called");
+            panic!("Callback should not be called");
         }));
         let gb = GrowthBook {
             context: Context {
@@ -431,8 +422,8 @@ mod tests {
         // TODO: unsafe is fine here, just for testing. Still better way?
         let subscription: TrackingCallback = TrackingCallback(Box::new(move |experiment, experiment_result| unsafe {
             assert_eq!(experiment.key, "my-test");
-            assert_eq!(experiment_result.in_experiment, true);
-            assert_eq!(experiment_result.hash_used, true);
+            assert!(experiment_result.in_experiment);
+            assert!(experiment_result.hash_used);
             assert_eq!(experiment_result.value, json!(1));
             COUNT += 1;
         }));
@@ -462,8 +453,8 @@ mod tests {
         // TODO: unsafe is fine here, just for testing. Still better way?
         let subscription: TrackingCallback = TrackingCallback(Box::new(move |experiment, experiment_result| unsafe {
             assert_eq!(experiment.key, "my-test");
-            assert_eq!(experiment_result.in_experiment, false);
-            assert_eq!(experiment_result.hash_used, false);
+            assert!(!experiment_result.in_experiment);
+            assert!(!experiment_result.hash_used);
             assert_eq!(experiment_result.value, json!(0));
             COUNT += 1;
         }));

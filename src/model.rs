@@ -10,7 +10,8 @@ pub type Condition = Value;
 pub type FeatureMap = HashMap<String, Feature>;
 pub type ForcedVariationsMap = HashMap<String, i32>;
 
-pub struct TrackingCallback(pub Box<dyn Fn(&Experiment, &ExperimentResult) + Send + Sync>);
+pub type TrackingCallbackFn = dyn Fn(&Experiment, &ExperimentResult) + Send + Sync;
+pub struct TrackingCallback(pub Box<TrackingCallbackFn>);
 
 impl Debug for TrackingCallback {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -478,30 +479,30 @@ mod tests {
             name: None,
             passthrough: true,
         };
-        assert_eq!(experiment_result.in_experiment, true);
+        assert!(experiment_result.in_experiment);
         assert_eq!(experiment_result.variation_id, 0);
         assert_eq!(experiment_result.value, Value::Null);
-        assert_eq!(experiment_result.hash_used, false);
+        assert!(!experiment_result.hash_used);
         assert_eq!(experiment_result.hash_attribute, "gg".to_string());
         assert_eq!(experiment_result.hash_value, Value::String("something".to_string()));
         assert_eq!(experiment_result.feature_id, None);
         assert_eq!(experiment_result.key, "bb".to_string());
         assert_eq!(experiment_result.bucket, 0.0);
         assert_eq!(experiment_result.name, None);
-        assert_eq!(experiment_result.passthrough, true);
+        assert!(experiment_result.passthrough);
 
         let experiment_result = ExperimentResult { ..Default::default() };
-        assert_eq!(experiment_result.in_experiment, false);
+        assert!(!experiment_result.in_experiment);
         assert_eq!(experiment_result.variation_id, 0);
         assert_eq!(experiment_result.value, Value::Null);
-        assert_eq!(experiment_result.hash_used, false);
+        assert!(!experiment_result.hash_used);
         assert_eq!(experiment_result.hash_attribute, "".to_string());
         assert_eq!(experiment_result.hash_value, Value::Null);
         assert_eq!(experiment_result.feature_id, None);
         assert_eq!(experiment_result.key, "".to_string());
         assert_eq!(experiment_result.bucket, 0.0);
         assert_eq!(experiment_result.name, None);
-        assert_eq!(experiment_result.passthrough, false);
+        assert!(!experiment_result.passthrough);
     }
 
     #[test]
@@ -606,8 +607,8 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(feature_result.value, json!(43));
-        assert_eq!(feature_result.on, false);
-        assert_eq!(feature_result.off, true);
+        assert!(!feature_result.on);
+        assert!(feature_result.off);
         assert_eq!(feature_result.experiment_result, None);
         assert_eq!(feature_result.experiment, None);
         assert_eq!(feature_result.source, Source::DefaultValue);
@@ -637,8 +638,8 @@ mod tests {
         assert_eq!(context.attributes, Value::Null);
         assert_eq!(context.features, FeatureMap::default());
         assert_eq!(context.forced_variations, ForcedVariationsMap::default());
-        assert_eq!(context.qa_mode, false);
-        assert_eq!(context.enabled, true);
+        assert!(!context.qa_mode);
+        assert!(context.enabled);
         assert_eq!(context.api_host, None);
         assert_eq!(context.url, "".to_string());
     }
