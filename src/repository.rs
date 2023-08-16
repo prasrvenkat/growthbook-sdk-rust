@@ -218,7 +218,7 @@ mod tests {
         assert_eq!(gb.features.read().unwrap().len(), 0);
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;
-        assert_eq!(gb.features.read().unwrap().len(), 5);
+        assert_eq!(gb.features.read().unwrap().len(), 7);
     }
 
     async fn wait_for_refresh(gb: &mut FeatureRepository) {
@@ -256,7 +256,7 @@ mod tests {
         static mut COUNT: u32 = 0;
         // unsafe is fine here, just for testing
         let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 5);
+            assert_eq!(features.len(), 7);
             COUNT += 1;
         }));
         let mut gb = FeatureRepository {
@@ -274,11 +274,11 @@ mod tests {
         static mut COUNT: u32 = 0;
         // TODO: unsafe is fine here, just for testing. Still better way?
         let callback_one: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 5);
+            assert_eq!(features.len(), 7);
             COUNT += 1;
         }));
         let callback_two: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 5);
+            assert_eq!(features.len(), 7);
             COUNT += 1;
         }));
 
