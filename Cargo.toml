@@ -21,3 +21,7 @@ chrono = { features = ["clock"], default-features = false, version = "0.4.26" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.28.2", default-features = false, features = ["rt", "macros", "time"] }
+
+
+[dev-dependencies]
+mockito = { version = "1.1.0" }
