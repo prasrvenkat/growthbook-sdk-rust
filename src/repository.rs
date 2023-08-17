@@ -73,7 +73,7 @@ impl FeatureRepository {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "tokio")]
     pub async fn get_features(&mut self) -> FeatureMap {
         if self.is_cache_expired() {
             let mut self_clone = self.clone();
@@ -90,7 +90,7 @@ impl FeatureRepository {
         }
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(not(feature = "tokio"))]
     pub async fn get_features(&mut self) -> FeatureMap {
         if self.is_cache_expired() {
             let mut self_clone = self.clone();
@@ -320,7 +320,6 @@ mod mock_features {
 }
 
 #[cfg(test)]
-#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use std::time::Duration;
 
@@ -481,143 +480,6 @@ mod tests {
         gb.clear_refresh_callbacks();
         gb.get_features().await;
         wait_for_refresh(&mut gb).await;
-        assert_eq!(unsafe { COUNT }, 0);
-    }
-}
-
-#[cfg(test)]
-#[cfg(target_arch = "wasm32")]
-mod tests {
-    use std::time::Duration;
-
-    use super::*;
-
-    #[test]
-    fn test_load_features_normal() {
-        let mut mock_server = mockito::Server::new();
-        mock_server
-            .mock("GET", "/api/features/key_for_unencrypted_features")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_features::UNENCRYPTED_FEATURES)
-            .create();
-        let mut gb = FeatureRepository {
-            api_host: mock_server.url(),
-            client_key: Some("key_for_unencrypted_features".to_string()),
-            ..Default::default()
-        };
-        assert_eq!(gb.features.read().unwrap().len(), 0);
-        gb.get_features();
-        assert_eq!(gb.features.read().unwrap().len(), 7);
-    }
-
-    #[test]
-    fn test_load_features_encrypted() {
-        let mut mock_server = mockito::Server::new();
-        mock_server
-            .mock("GET", "/api/features/key_for_encrypted_features")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_features::ENCRYPTED_FEATURES)
-            .create();
-        let mut gb = FeatureRepository {
-            api_host: mock_server.url(),
-            client_key: Some("key_for_encrypted_features".to_string()),
-            decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
-            ..Default::default()
-        };
-        assert_eq!(gb.features.read().unwrap().len(), 0);
-        gb.get_features();
-        assert_eq!(gb.features.read().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_single_callback() {
-        static mut COUNT: u32 = 0;
-        // unsafe is fine here, just for testing
-        let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 5);
-            COUNT += 1;
-        }));
-        let mut mock_server = mockito::Server::new();
-        mock_server
-            .mock("GET", "/api/features/key_for_unencrypted_features")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_features::UNENCRYPTED_FEATURES)
-            .create();
-
-        let mut gb = FeatureRepository {
-            api_host: mock_server.url(),
-            client_key: Some("key_for_unencrypted_features".to_string()),
-            ..Default::default()
-        };
-        gb.add_refresh_callback(callback);
-        gb.get_features();
-        assert_eq!(unsafe { COUNT }, 1);
-    }
-
-    #[test]
-    fn test_multiple_callback() {
-        static mut COUNT: u32 = 0;
-        // TODO: unsafe is fine here, just for testing. Still better way?
-        let callback_one: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 5);
-            COUNT += 1;
-        }));
-        let callback_two: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 5);
-            COUNT += 1;
-        }));
-        let mut mock_server = mockito::Server::new();
-        mock_server
-            .mock("GET", "/api/features/key_for_unencrypted_features")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_features::UNENCRYPTED_FEATURES)
-            .create();
-        let mut gb = FeatureRepository {
-            api_host: mock_server.url(),
-            client_key: Some("key_for_unencrypted_features".to_string()),
-            ..Default::default()
-        };
-        gb.add_refresh_callback(callback_one);
-        gb.add_refresh_callback(callback_two);
-        gb.get_features();
-        assert_eq!(unsafe { COUNT }, 2);
-    }
-
-    #[test]
-    fn test_clear_callback() {
-        static mut COUNT: u32 = 0;
-        // TODO: unsafe is fine here, just for testing. Still better way?
-        let callback: FeatureRefreshCallback = FeatureRefreshCallback(Box::new(move |features| unsafe {
-            assert_eq!(features.len(), 1);
-            COUNT += 1;
-        }));
-        let mut mock_server = mockito::Server::new();
-        mock_server
-            .mock("GET", "/api/features/key_for_encrypted_features")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_features::ENCRYPTED_FEATURES)
-            .create();
-        let mut gb = FeatureRepository {
-            api_host: mock_server.url(),
-            client_key: Some("key_for_encrypted_features".to_string()),
-            decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
-            ..Default::default()
-        };
-        gb.add_refresh_callback(callback);
-        gb.get_features();
-        assert_eq!(unsafe { COUNT }, 1);
-
-        unsafe {
-            COUNT = 0;
-        }
-        *gb.refreshed_at.write().unwrap() = 0;
-        gb.clear_refresh_callbacks();
-        gb.get_features();
         assert_eq!(unsafe { COUNT }, 0);
     }
 }

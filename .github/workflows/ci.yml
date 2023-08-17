@@ -9,9 +9,6 @@ env:
   CARGO_TERM_COLOR: always
 jobs:
   build-and-test:
-    strategy:
-      matrix:
-        target: [x86_64-unknown-linux-gnu, wasm32-unknown-unknown]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,8 +16,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          target: wasm32-unknown-unknown
           components: rustfmt, clippy
       - name: Format Check
         uses: actions-rs/cargo@v1
@@ -32,13 +28,23 @@ jobs:
         with:
           command: clippy
           args: --verbose -- -D warnings     
-      - name: Build
+      - name: Build x86_64-unknown-linux-gnu
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --verbose
-      - name: Test
+          args: --verbose --target x86_64-unknown-linux-gnu
+      - name: Build wasm32-unknown-unknown
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose --no-default-features --target wasm32-unknown-unknown
+      - name: Default Test
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --verbose
+      - name: No-Default Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --no-default-features --verbose
