@@ -200,6 +200,126 @@ impl FeatureRepository {
 }
 
 #[cfg(test)]
+mod mock_features {
+    pub(crate) const UNENCRYPTED_FEATURES: &str = r#"
+        {
+            "status": 200,
+            "features": {
+              "banner_text": {
+                "defaultValue": "Welcome to Acme Donuts!",
+                "rules": [
+                  {
+                    "condition": {
+                      "country": "france"
+                    },
+                    "force": "Bienvenue au Beignets Acme !"
+                  },
+                  {
+                    "condition": {
+                      "country": "spain"
+                    },
+                    "force": "¡Bienvenidos y bienvenidas a Donas Acme!"
+                  }
+                ]
+              },
+              "dark_mode": {
+                "defaultValue": false,
+                "rules": [
+                  {
+                    "condition": {
+                      "loggedIn": true
+                    },
+                    "force": true,
+                    "coverage": 0.5,
+                    "hashAttribute": "id"
+                  }
+                ]
+              },
+              "donut_price": {
+                "defaultValue": 2.5,
+                "rules": [
+                  {
+                    "condition": {
+                      "employee": true
+                    },
+                    "force": 0
+                  }
+                ]
+              },
+              "meal_overrides_gluten_free": {
+                "defaultValue": {
+                  "meal_type": "standard",
+                  "dessert": "Strawberry Cheesecake"
+                },
+                "rules": [
+                  {
+                    "condition": {
+                      "dietaryRestrictions": {
+                        "$elemMatch": {
+                          "$eq": "gluten_free"
+                        }
+                      }
+                    },
+                    "force": {
+                      "meal_type": "gf",
+                      "dessert": "French Vanilla Ice Cream"
+                    }
+                  }
+                ]
+              },
+              "app_name": {
+                "defaultValue": "(unknown)",
+                "rules": [
+                  {
+                    "condition": {
+                      "version": {
+                        "$vgte": "1.0.0",
+                        "$vlt": "2.0.0"
+                      }
+                    },
+                    "force": "Albatross"
+                  },
+                  {
+                    "condition": {
+                      "version": {
+                        "$vgte": "2.0.0",
+                        "$vlt": "3.0.0"
+                      }
+                    },
+                    "force": "Badger"
+                  },
+                  {
+                    "condition": {
+                      "version": {
+                        "$vgte": "3.0.0",
+                        "$vlt": "4.0.0"
+                      }
+                    },
+                    "force": "Capybara"
+                  }
+                ]
+              },
+              "random_string": {
+                "defaultValue": "changed 32"
+              },
+              "greeting": {
+                "defaultValue": "hello, world!"
+              }
+            },
+            "dateUpdated": "2023-08-02T19:11:46.550Z"
+        }          
+        "#;
+    pub(crate) const ENCRYPTED_FEATURES: &str = r#"
+        {
+            "status": 200,
+            "features": {},
+            "dateUpdated": "2023-07-28T23:16:59.618Z",
+            "encryptedFeatures": "UqANSnJ7xTTK9y2PALtnwQ==.BZAstXrI9eh9qlvp7VinD8CKk9ZE8755vnFtkClJNYstTUwF4FKwWWq84F/DFTe+2Xlzbys83S1Ih6XIFhoigKIQeImlnzR3GJ6Bvj3REbKccw9TJz4bX3ozFzSNBbZbLAynnd9aTLK0PAYASLXKtIaAs/K0WSbV7mM95CVMt9DU7w1TKme/tQcqfEn+CJhi2WHNdEzGs18j9t7zXcRgdAvXizLzP7HdOnCmfXy9bZbpqWmAdUBZ0yhmb2PGXa5FBwet7h1MV0kRFX++WocwjA=="
+        }        
+        "#;
+}
+
+#[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use std::time::Duration;
@@ -207,19 +327,6 @@ mod tests {
     use tokio::time::sleep;
 
     use super::*;
-
-    #[tokio::test]
-    async fn test_load_features_normal() {
-        // TODO: hack - currently using the key from java examples
-        let mut gb = FeatureRepository {
-            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
-            ..Default::default()
-        };
-        assert_eq!(gb.features.read().unwrap().len(), 0);
-        gb.get_features().await;
-        wait_for_refresh(&mut gb).await;
-        assert_eq!(gb.features.read().unwrap().len(), 7);
-    }
 
     async fn wait_for_refresh(gb: &mut FeatureRepository) {
         let mut timeout = 1000;
@@ -238,10 +345,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_load_features_encrypted() {
-        // TODO: hack - currently using the key from java examples
+    async fn test_load_features_normal() {
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_unencrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::UNENCRYPTED_FEATURES)
+            .create();
         let mut gb = FeatureRepository {
-            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_unencrypted_features".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(gb.features.read().unwrap().len(), 0);
+        gb.get_features().await;
+        wait_for_refresh(&mut gb).await;
+        assert_eq!(gb.features.read().unwrap().len(), 7);
+    }
+
+    #[tokio::test]
+    async fn test_load_features_encrypted() {
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_encrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::ENCRYPTED_FEATURES)
+            .create();
+        let mut gb = FeatureRepository {
+            api_host: mock_server.url(),
+            client_key: Some("key_for_encrypted_features".to_string()),
             decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
             ..Default::default()
         };
@@ -259,8 +393,18 @@ mod tests {
             assert_eq!(features.len(), 7);
             COUNT += 1;
         }));
+
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_unencrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::UNENCRYPTED_FEATURES)
+            .create();
+
         let mut gb = FeatureRepository {
-            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_unencrypted_features".to_string()),
             ..Default::default()
         };
         gb.add_refresh_callback(callback);
@@ -282,8 +426,17 @@ mod tests {
             COUNT += 1;
         }));
 
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_unencrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::UNENCRYPTED_FEATURES)
+            .create();
+
         let mut gb = FeatureRepository {
-            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_unencrypted_features".to_string()),
             ..Default::default()
         };
         gb.add_refresh_callback(callback_one);
@@ -301,8 +454,18 @@ mod tests {
             assert_eq!(features.len(), 1);
             COUNT += 1;
         }));
+
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_encrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::ENCRYPTED_FEATURES)
+            .create();
+
         let mut gb = FeatureRepository {
-            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_encrypted_features".to_string()),
             decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
             ..Default::default()
         };
@@ -331,21 +494,35 @@ mod tests {
 
     #[test]
     fn test_load_features_normal() {
-        // TODO: hack - currently using the key from java examples
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_unencrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::UNENCRYPTED_FEATURES)
+            .create();
         let mut gb = FeatureRepository {
-            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_unencrypted_features".to_string()),
             ..Default::default()
         };
         assert_eq!(gb.features.read().unwrap().len(), 0);
         gb.get_features();
-        assert_eq!(gb.features.read().unwrap().len(), 5);
+        assert_eq!(gb.features.read().unwrap().len(), 7);
     }
 
     #[test]
     fn test_load_features_encrypted() {
-        // TODO: hack - currently using the key from java examples
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_encrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::ENCRYPTED_FEATURES)
+            .create();
         let mut gb = FeatureRepository {
-            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_encrypted_features".to_string()),
             decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
             ..Default::default()
         };
@@ -362,8 +539,17 @@ mod tests {
             assert_eq!(features.len(), 5);
             COUNT += 1;
         }));
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_unencrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::UNENCRYPTED_FEATURES)
+            .create();
+
         let mut gb = FeatureRepository {
-            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_unencrypted_features".to_string()),
             ..Default::default()
         };
         gb.add_refresh_callback(callback);
@@ -383,9 +569,16 @@ mod tests {
             assert_eq!(features.len(), 5);
             COUNT += 1;
         }));
-
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_unencrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::UNENCRYPTED_FEATURES)
+            .create();
         let mut gb = FeatureRepository {
-            client_key: Some("java_NsrWldWd5bxQJZftGsWKl7R2yD2LtAK8C8EUYh9L8".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_unencrypted_features".to_string()),
             ..Default::default()
         };
         gb.add_refresh_callback(callback_one);
@@ -402,8 +595,16 @@ mod tests {
             assert_eq!(features.len(), 1);
             COUNT += 1;
         }));
+        let mut mock_server = mockito::Server::new();
+        mock_server
+            .mock("GET", "/api/features/key_for_encrypted_features")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_features::ENCRYPTED_FEATURES)
+            .create();
         let mut gb = FeatureRepository {
-            client_key: Some("sdk-862b5mHcP9XPugqD".to_string()),
+            api_host: mock_server.url(),
+            client_key: Some("key_for_encrypted_features".to_string()),
             decryption_key: Some("BhB1wORFmZLTDjbvstvS8w==".to_string()),
             ..Default::default()
         };

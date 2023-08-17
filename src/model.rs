@@ -221,11 +221,6 @@ pub struct Feature {
 pub struct Context {
     #[serde(default = "context_enabled")]
     pub enabled: bool,
-    // TODO: do we need these? <start>
-    pub api_host: Option<String>,
-    pub client_key: Option<String>,
-    pub decryption_key: Option<String>,
-    // TODO: do we need these? <end>
     pub attributes: Attributes,
     pub url: String,
     pub features: FeatureMap,
@@ -237,9 +232,6 @@ impl Default for Context {
     fn default() -> Self {
         Context {
             enabled: context_enabled(),
-            api_host: Default::default(),
-            client_key: Default::default(),
-            decryption_key: Default::default(),
             attributes: Default::default(),
             url: Default::default(),
             features: Default::default(),
@@ -627,20 +619,14 @@ mod tests {
     #[test]
     fn test_context() {
         let context = Context {
-            client_key: None,
-            decryption_key: None,
-            forced_variations: Default::default(),
             qa_mode: false,
             ..Default::default()
         };
-        assert_eq!(context.client_key, None);
-        assert_eq!(context.decryption_key, None);
         assert_eq!(context.attributes, Value::Null);
         assert_eq!(context.features, FeatureMap::default());
         assert_eq!(context.forced_variations, ForcedVariationsMap::default());
         assert!(!context.qa_mode);
         assert!(context.enabled);
-        assert_eq!(context.api_host, None);
         assert_eq!(context.url, "".to_string());
     }
 }
